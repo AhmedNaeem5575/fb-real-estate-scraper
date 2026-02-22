@@ -1,6 +1,5 @@
 const { chromium } = require('playwright');
 const path = require('path');
-const clipboardy = require('clipboardy').default;
 const logger = require('../utils/logger');
 const Group = require('../models/Group');
 const Listing = require('../models/Listing');
@@ -8,6 +7,15 @@ const externalApi = require('./externalApi');
 
 const SESSION_PATH = process.env.SESSION_PATH || './playwright/session';
 const POSTS_PER_GROUP = parseInt(process.env.POSTS_PER_GROUP) || 50;
+
+// Dynamic import for clipboardy (ESM module)
+let clipboardy = null;
+const getClipboardy = async () => {
+  if (!clipboardy) {
+    clipboardy = (await import('clipboardy')).default;
+  }
+  return clipboardy;
+};
 
 class Scraper {
   constructor() {
@@ -638,8 +646,9 @@ class Scraper {
       // Wait for clipboard
       await this.delay(800);
 
-      // Read clipboard
-      const url = clipboardy.readSync();
+      // Read clipboard (using dynamic import for ESM module)
+      const clip = await getClipboardy();
+      const url = await clip.read();
 
       // Close dialog
       await page.keyboard.press('Escape');
