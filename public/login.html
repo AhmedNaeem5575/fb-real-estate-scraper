@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - FB Real Estate Scraper</title>
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-dark: #2563eb;
+      --bg: #f1f5f9;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --error: #ef4444;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-md: 0 4px 12px rgba(0,0,0,.1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      width: 100%;
+      max-width: 380px;
+      padding: 32px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .logo-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .logo-text span { color: var(--primary); }
+
+    .logo-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .form-group input {
+      width: 100%;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0 14px;
+      font-size: 14px;
+      color: var(--text);
+      background: white;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+
+    .form-group input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+    }
+
+    .form-group input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .error-msg {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: var(--error);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 18px;
+      display: none;
+    }
+
+    .error-msg.show { display: block; }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      height: 44px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover { background: var(--primary-dark); }
+
+    .btn-primary:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+
+    .btn-primary.loading .spinner { display: block; }
+    .btn-primary.loading .btn-text { display: none; }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="logo">
+      <div class="logo-icon">🏠</div>
+      <div class="logo-text"><span>FB</span> Real Estate Scraper</div>
+      <div class="logo-sub">Sign in to continue</div>
+    </div>
+
+    <div class="error-msg" id="error-msg"></div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Enter username" autocomplete="username" required>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Enter password" autocomplete="current-password" required>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submit-btn">
+        <span class="spinner"></span>
+        <span class="btn-text">Sign In</span>
+      </button>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const errorMsg = document.getElementById('error-msg');
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.add('show');
+    }
+
+    function hideError() {
+      errorMsg.classList.remove('show');
+    }
+
+    function setLoading(loading) {
+      if (loading) {
+        submitBtn.classList.add('loading');
+        submitBtn.disabled = true;
+      } else {
+        submitBtn.classList.remove('loading');
+        submitBtn.disabled = false;
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideError();
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!username || !password) {
+        showError('Please enter both username and password');
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          window.location.href = '/';
+        } else {
+          showError(data.error || 'Login failed');
+        }
+      } catch (err) {
+        showError('Could not connect to server');
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    // Check if already logged in
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            window.location.href = '/';
+          }
+        }
+      } catch (_) {}
+    })();
+  </script>
+</body>
+</html>

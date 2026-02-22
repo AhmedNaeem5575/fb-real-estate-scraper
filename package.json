@@ -1,0 +1,34 @@
+{
+  "name": "fb-real-estate-scraping-tool",
+  "version": "1.0.0",
+  "description": "Facebook real estate groups scraping tool with API and scheduled jobs",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "seed": "node scripts/seed.js",
+    "reseed": "node scripts/seed.js --reseed",
+    "setup-session": "node scripts/setup-session.js"
+  },
+  "keywords": [
+    "scraping",
+    "facebook",
+    "real-estate",
+    "playwright"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "better-sqlite3": "^9.4.0",
+    "clipboardy": "^5.3.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.42.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}

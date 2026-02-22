@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/*.sqlite
+playwright/session/
+*.log
+.DS_Store
+
+*.png

@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FB Real Estate Listings</title>
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-dark: #2563eb;
+      --bg: #f1f5f9;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-md: 0 4px 12px rgba(0,0,0,.1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    header {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+
+    .logo {
+      font-size: 17px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo span { color: var(--primary); }
+
+    .header-right { display: flex; align-items: center; gap: 10px; }
+
+    .user-pill {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .user-pill strong { color: var(--text); }
+
+    /* ── Scrape Status ──────────────────────────── */
+    .scrape-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    .scrape-status.running {
+      background: #fef3c7;
+      border-color: #fcd34d;
+    }
+    .scrape-status .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--text-muted);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    .scrape-status-label { color: var(--text-muted); }
+    .scrape-status-value { font-weight: 600; color: var(--text); }
+    .scrape-status.running .scrape-status-value { color: #d97706; }
+
+    /* ── Buttons ─────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 15px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all .15s;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--bg); color: var(--text); }
+    .btn-sm { padding: 5px 11px; font-size: 12px; }
+
+    /* ── Filter bar ──────────────────────────── */
+    .filter-bar {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 24px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .filter-bar input[type="text"],
+    .filter-bar select,
+    .filter-bar input[type="date"] {
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0 10px;
+      font-size: 13px;
+      color: var(--text);
+      background: white;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .filter-bar input[type="text"] { padding-left: 32px; width: 100%; }
+    .filter-bar input:focus,
+    .filter-bar select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+    .filter-bar select { min-width: 130px; cursor: pointer; }
+
+    .filter-sep { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+
+    .date-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .date-group label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+    /* ── Main ────────────────────────────────── */
+    .main {
+      padding: 20px 24px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    .results-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    #results-text { font-size: 13px; color: var(--text-muted); }
+
+    .per-page {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .per-page select {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 13px;
+      color: var(--text);
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* ── View Toggle ───────────────────────────── */
+    .view-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .view-toggle-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: white;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .view-toggle-btn:hover { background: var(--bg); color: var(--text); }
+    .view-toggle-btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+    .view-toggle-btn svg { width: 16px; height: 16px; }
+
+    /* ── Table View ────────────────────────────── */
+    .listings-table-wrap {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .listings-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .listings-table thead {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+    }
+    .listings-table th {
+      padding: 11px 14px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      white-space: nowrap;
+    }
+    .listings-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .listings-table tbody tr {
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .listings-table tbody tr:hover { background: #f8fafc; }
+    .listings-table tbody tr:last-child td { border-bottom: none; }
+
+    .table-title {
+      font-weight: 500;
+      color: var(--text);
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .table-price {
+      font-weight: 700;
+      color: var(--primary);
+      white-space: nowrap;
+    }
+    .table-location {
+      color: var(--text-muted);
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .table-owner {
+      color: var(--text-muted);
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .table-date {
+      color: var(--text-muted);
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    .table-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .table-actions .btn { padding: 4px 10px; font-size: 11px; }
+
+    /* ── Grid ────────────────────────────────── */
+    .listings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 14px;
+    }
+
+    /* ── Card ────────────────────────────────── */
+    .listing-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      transition: box-shadow .2s, transform .2s;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+    }
+    .listing-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .badge-rent { background: #dbeafe; color: #1d4ed8; }
+    .badge-sale { background: #dcfce7; color: #15803d; }
+    .badge-unknown { background: #f1f5f9; color: #64748b; }
+
+    .group-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: right;
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .card-price {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 10px;
+    }
+
+    .card-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+    .meta-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+    .meta-row svg { flex-shrink: 0; }
+
+    .card-footer {
+      display: flex;
+      gap: 6px;
+      padding-top: 11px;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+    }
+    .card-footer .btn { flex: 1; justify-content: center; }
+
+    /* ── Skeleton ────────────────────────────── */
+    .skeleton {
+      background: linear-gradient(90deg, #f0f4f8 25%, #e2e8f0 50%, #f0f4f8 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 5px;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .skeleton-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .sk-row { display: flex; gap: 8px; margin-bottom: 10px; }
+
+    /* ── Empty / Error ───────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-muted);
+      grid-column: 1 / -1;
+    }
+    .empty-state .icon { font-size: 44px; margin-bottom: 14px; }
+    .empty-state h3 { font-size: 17px; color: var(--text); margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; }
+
+    /* ── Pagination ──────────────────────────── */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 4px;
+      margin-top: 28px;
+      padding-bottom: 32px;
+    }
+    .page-btn {
+      min-width: 34px;
+      height: 34px;
+      padding: 0 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: 13px;
+      cursor: pointer;
+      background: white;
+      color: var(--text);
+      transition: all .15s;
+    }
+    .page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+    .page-btn.active { background: var(--primary); border-color: var(--primary); color: white; font-weight: 600; }
+    .page-btn:disabled { opacity: .38; cursor: not-allowed; }
+    .page-ellipsis { min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; }
+
+    /* ── Modal ───────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity .2s, visibility .2s;
+    }
+    .modal-overlay.open { opacity: 1; visibility: visible; }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 620px;
+      max-height: 88vh;
+      overflow-y: auto;
+      transform: scale(.96);
+      transition: transform .2s;
+    }
+    .modal-overlay.open .modal { transform: scale(1); }
+
+    .modal-header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      position: sticky;
+      top: 0;
+      background: white;
+      z-index: 1;
+    }
+    .modal-title { font-size: 16px; font-weight: 700; line-height: 1.4; max-width: 88%; }
+
+    .close-btn {
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: var(--bg);
+      border-radius: 7px;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .close-btn:hover { background: var(--border); color: var(--text); }
+
+    .modal-body { padding: 20px 22px; }
+
+    .modal-section { margin-bottom: 18px; }
+    .modal-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .detail-field .label { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
+    .detail-field .value { font-size: 13px; color: var(--text); font-weight: 500; word-break: break-word; }
+
+    .raw-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.65;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .modal-footer {
+      padding: 14px 22px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+    .modal-footer .btn { flex: 1; justify-content: center; }
+
+    /* ── Toast ───────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 22px;
+      right: 22px;
+      background: #1e293b;
+      color: white;
+      padding: 11px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: var(--shadow-md);
+      z-index: 300;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all .3s;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── Responsive ──────────────────────────── */
+    @media (max-width: 640px) {
+      .filter-sep { display: none; }
+      .date-group { flex-wrap: wrap; }
+      .main { padding: 14px 16px; }
+      header { padding: 0 16px; }
+      .filter-bar { padding: 10px 16px; }
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────── -->
+<header>
+  <div class="logo">🏠 <span>FB</span> Real Estate Scraper</div>
+  <div class="header-right">
+    <div class="scrape-status" id="scrape-status">
+      <span class="scrape-status-label">Status:</span>
+      <span class="scrape-status-value" id="scrape-status-text">Loading…</span>
+    </div>
+    <div class="user-pill">
+      <span>Total: <strong id="total-count">—</strong></span>
+      <span>|</span>
+      <span id="user-name">—</span>
+    </div>
+    <button class="btn btn-primary" id="btn-scrape" onclick="triggerScrape()">▶ Run Scrape</button>
+    <button class="btn btn-ghost" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<!-- ── Filters ─────────────────────────────────── -->
+<div class="filter-bar">
+  <div class="search-wrap">
+    <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input type="text" id="search-input" placeholder="Search title, location, owner…" />
+  </div>
+
+  <select id="type-filter">
+    <option value="">All Types</option>
+    <option value="for_rent">For Rent</option>
+    <option value="for_sale">For Sale</option>
+  </select>
+
+  <select id="group-filter">
+    <option value="">All Groups</option>
+  </select>
+
+  <div class="filter-sep"></div>
+
+  <div class="date-group">
+    <label>From</label>
+    <input type="date" id="date-from" />
+    <label>To</label>
+    <input type="date" id="date-to" />
+  </div>
+
+  <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
+</div>
+
+<!-- ── Main ────────────────────────────────────── -->
+<div class="main">
+  <div class="results-bar">
+    <span id="results-text">Loading…</span>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="view-toggle">
+        <button class="view-toggle-btn" id="btn-table" onclick="setViewMode('table')" title="Table view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <button class="view-toggle-btn active" id="btn-cards" onclick="setViewMode('cards')" title="Card view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </button>
+      </div>
+      <div class="per-page">
+        Show
+        <select id="per-page" onchange="changePerPage()">
+          <option value="12">12</option>
+          <option value="24">24</option>
+          <option value="48">48</option>
+        </select>
+        per page
+      </div>
+    </div>
+  </div>
+
+  <div id="listings-container"></div>
+  <div id="pagination" class="pagination"></div>
+</div>
+
+<!-- ── Modal ────────────────────────────────────── -->
+<div class="modal-overlay" id="modal" onclick="closeModalOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title"></div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ── Script ────────────────────────────────────── -->
+<script>
+  const state = {
+    page: 1,
+    limit: 12,
+    search: '',
+    listing_type: '',
+    group_id: '',
+    date_from: '',
+    date_to: '',
+    filteredTotal: 0,
+    loading: false,
+    listings: [],
+    viewMode: localStorage.getItem('viewMode') || 'table'
+  };
+
+  /* ── Utils ───────────────────────────────────── */
+  function debounce(fn, ms) {
+    let t;
+    return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+  }
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function fmtDate(dt) {
+    if (!dt) return '—';
+    return new Date(dt).toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function fmtDateShort(dt) {
+    if (!dt) return '—';
+    return new Date(dt).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric'
+    });
+  }
+
+  function typeBadge(type) {
+    if (!type) return `<span class="badge badge-unknown">Unknown</span>`;
+    const t = type.toLowerCase();
+    if (t.includes('rent')) return `<span class="badge badge-rent">For Rent</span>`;
+    if (t.includes('sale')) return `<span class="badge badge-sale">For Sale</span>`;
+    return `<span class="badge badge-unknown">${esc(type)}</span>`;
+  }
+
+  /* ── Fetch listings ──────────────────────────── */
+  async function fetchListings() {
+    if (state.loading) return;
+    state.loading = true;
+    renderSkeleton();
+
+    const offset = (state.page - 1) * state.limit;
+    const p = new URLSearchParams({ limit: state.limit, offset });
+    if (state.search)       p.set('search',       state.search);
+    if (state.listing_type) p.set('listing_type', state.listing_type);
+    if (state.group_id)     p.set('group_id',     state.group_id);
+    if (state.date_from)    p.set('date_from',    state.date_from);
+    if (state.date_to)      p.set('date_to',      state.date_to);
+
+    try {
+      const res  = await fetch(`/api/listings?${p}`);
+      const data = await res.json();
+      if (data.success) {
+        state.listings      = data.data;
+        state.filteredTotal = data.total;
+        document.getElementById('total-count').textContent =
+          data.total.toLocaleString();
+        renderListings();
+        renderPagination();
+        updateResultsText();
+      } else {
+        renderError(data.error || 'Unknown error');
+      }
+    } catch (err) {
+      renderError('Could not reach the API. Is the server running?');
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  /* ── Fetch groups ────────────────────────────── */
+  async function fetchGroups() {
+    try {
+      const res  = await fetch('/api/groups');
+      const data = await res.json();
+      if (data.success) {
+        const sel = document.getElementById('group-filter');
+        data.data.forEach(g => {
+          const o = document.createElement('option');
+          o.value       = g.id;
+          o.textContent = g.name || `Group #${g.id}`;
+          sel.appendChild(o);
+        });
+      }
+    } catch (_) {}
+  }
+
+  /* ── Render listings ─────────────────────────── */
+  function renderListings() {
+    const c = document.getElementById('listings-container');
+    if (!state.listings.length) {
+      c.innerHTML = `
+        <div class="listings-grid">
+          <div class="empty-state">
+            <div class="icon">🔍</div>
+            <h3>No listings found</h3>
+            <p>Try adjusting your search or filters</p>
+          </div>
+        </div>`;
+      return;
+    }
+
+    if (state.viewMode === 'table') {
+      c.innerHTML = renderTable();
+    } else {
+      c.innerHTML = `<div class="listings-grid">${state.listings.map(cardHTML).join('')}</div>`;
+    }
+
+    updateViewToggleButtons();
+  }
+
+  function updateViewToggleButtons() {
+    document.getElementById('btn-cards').classList.toggle('active', state.viewMode === 'cards');
+    document.getElementById('btn-table').classList.toggle('active', state.viewMode === 'table');
+  }
+
+  function setViewMode(mode) {
+    state.viewMode = mode;
+    localStorage.setItem('viewMode', mode);
+    renderListings();
+  }
+
+  function renderTable() {
+    const rows = state.listings.map(l => `
+      <tr onclick="openModal(${l.id})">
+        <td>${typeBadge(l.listing_type)}</td>
+        <td><div class="table-title" title="${esc(l.title)}">${esc(l.title) || '—'}</div></td>
+        <td><div class="table-price">${esc(l.price) || '—'}</div></td>
+        <td><div class="table-location" title="${esc(l.location)}">${esc(l.location) || '—'}</div></td>
+        <td><div class="table-owner" title="${esc(l.owner_name)}">${esc(l.owner_name) || '—'}</div></td>
+        <td><span class="group-tag" style="max-width:100px" title="${esc(l.group_name)}">${esc(l.group_name) || '—'}</span></td>
+        <td class="table-date">${fmtDateShort(l.scraped_at)}</td>
+        <td onclick="event.stopPropagation()">
+          <div class="table-actions">
+            ${l.post_url ? `<a href="${esc(l.post_url)}" target="_blank" rel="noopener" class="btn btn-ghost">Post ↗</a>` : ''}
+            ${l.owner_profile_url ? `<a href="${esc(l.owner_profile_url)}" target="_blank" rel="noopener" class="btn btn-ghost">Owner ↗</a>` : ''}
+            <button class="btn btn-primary" onclick="openModal(${l.id})">View</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+
+    return `
+      <div class="listings-table-wrap">
+        <table class="listings-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Title</th>
+              <th>Price</th>
+              <th>Location</th>
+              <th>Owner</th>
+              <th>Group</th>
+              <th>Scraped</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function cardHTML(l) {
+    const locSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+    const personSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+    const calSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+
+    return `
+    <div class="listing-card" onclick="openModal(${l.id})">
+      <div class="card-header">
+        ${typeBadge(l.listing_type)}
+        <span class="group-tag" title="${esc(l.group_name)}">${esc(l.group_name) || '—'}</span>
+      </div>
+      <div class="card-title">${esc(l.title) || 'No title'}</div>
+      ${l.price ? `<div class="card-price">${esc(l.price)}</div>` : ''}
+      <div class="card-meta">
+        ${l.location   ? `<div class="meta-row">${locSvg}${esc(l.location)}</div>`   : ''}
+        ${l.owner_name ? `<div class="meta-row">${personSvg}${esc(l.owner_name)}</div>` : ''}
+        <div class="meta-row">${calSvg}${fmtDateShort(l.scraped_at)}</div>
+      </div>
+      <div class="card-footer" onclick="event.stopPropagation()">
+        ${l.post_url
+          ? `<a href="${esc(l.post_url)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">View Post ↗</a>`
+          : ''}
+        <button class="btn btn-primary btn-sm" onclick="openModal(${l.id})">Details</button>
+      </div>
+    </div>`;
+  }
+
+  /* ── Skeleton ────────────────────────────────── */
+  function renderSkeleton() {
+    const n = Math.min(state.limit, 12);
+    const cards = Array(n).fill(0).map(() => `
+      <div class="skeleton-card">
+        <div class="sk-row">
+          <div class="skeleton" style="width:64px;height:20px"></div>
+          <div class="skeleton" style="width:80px;height:20px;margin-left:auto"></div>
+        </div>
+        <div class="skeleton" style="height:16px;margin-bottom:5px"></div>
+        <div class="skeleton" style="height:16px;width:55%;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:20px;width:38%;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:13px;margin-bottom:5px"></div>
+        <div class="skeleton" style="height:13px;width:65%;margin-bottom:5px"></div>
+        <div class="skeleton" style="height:13px;width:45%"></div>
+      </div>`).join('');
+    document.getElementById('listings-container').innerHTML =
+      `<div class="listings-grid">${cards}</div>`;
+  }
+
+  function renderError(msg) {
+    document.getElementById('listings-container').innerHTML = `
+      <div class="listings-grid">
+        <div class="empty-state">
+          <div class="icon">⚠️</div>
+          <h3>Failed to load listings</h3>
+          <p>${esc(msg)}</p>
+        </div>
+      </div>`;
+  }
+
+  /* ── Pagination ──────────────────────────────── */
+  function renderPagination() {
+    const total = Math.ceil(state.filteredTotal / state.limit);
+    const cur   = state.page;
+    const el    = document.getElementById('pagination');
+
+    if (total <= 1) { el.innerHTML = ''; return; }
+
+    const pages = [];
+    pages.push(1);
+    if (cur > 3) pages.push('…');
+    for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i);
+    if (cur < total - 2) pages.push('…');
+    if (total > 1) pages.push(total);
+
+    el.innerHTML =
+      `<button class="page-btn" onclick="goToPage(${cur-1})" ${cur===1?'disabled':''}>‹</button>` +
+      pages.map(p => p === '…'
+        ? `<span class="page-ellipsis">…</span>`
+        : `<button class="page-btn${p===cur?' active':''}" onclick="goToPage(${p})">${p}</button>`
+      ).join('') +
+      `<button class="page-btn" onclick="goToPage(${cur+1})" ${cur===total?'disabled':''}>›</button>`;
+  }
+
+  function goToPage(p) {
+    const total = Math.ceil(state.filteredTotal / state.limit);
+    if (p < 1 || p > total) return;
+    state.page = p;
+    fetchListings();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function updateResultsText() {
+    const from = state.filteredTotal === 0 ? 0 : (state.page - 1) * state.limit + 1;
+    const to   = Math.min(state.page * state.limit, state.filteredTotal);
+    document.getElementById('results-text').textContent =
+      state.filteredTotal === 0
+        ? 'No results'
+        : `Showing ${from}–${to} of ${state.filteredTotal.toLocaleString()} listings`;
+  }
+
+  /* ── Modal ───────────────────────────────────── */
+  function openModal(id) {
+    const l = state.listings.find(x => x.id === id);
+    if (!l) return;
+
+    document.getElementById('modal-title').textContent = l.title || 'Listing Details';
+
+    document.getElementById('modal-body').innerHTML = `
+      <div class="modal-section">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          ${typeBadge(l.listing_type)}
+          <span style="font-size:12px;color:var(--text-muted)">${esc(l.group_name) || '—'}</span>
+        </div>
+        ${l.price ? `<div style="font-size:21px;font-weight:700;color:var(--primary)">${esc(l.price)}</div>` : ''}
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-label">Details</div>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="label">Location</div>
+            <div class="value">${esc(l.location) || '—'}</div>
+          </div>
+          <div class="detail-field">
+            <div class="label">Owner</div>
+            <div class="value">${esc(l.owner_name) || '—'}</div>
+          </div>
+          <div class="detail-field">
+            <div class="label">Contact</div>
+            <div class="value">${esc(l.contact_info) || '—'}</div>
+          </div>
+          <div class="detail-field">
+            <div class="label">Scraped At</div>
+            <div class="value">${fmtDate(l.scraped_at)}</div>
+          </div>
+          <div class="detail-field">
+            <div class="label">Post ID</div>
+            <div class="value">${esc(l.post_id) || '—'}</div>
+          </div>
+          <div class="detail-field">
+            <div class="label">Listing ID</div>
+            <div class="value">${l.id}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+      // ${l.raw_content ? `
+      // <div class="modal-section">
+      //   <div class="modal-section-label">Raw Content</div>
+      //   <div class="raw-box">${esc(l.raw_content)}</div>
+      // </div>` : ''}
+
+    document.getElementById('modal-footer').innerHTML = `
+      ${l.post_url ? `<a href="${esc(l.post_url)}" target="_blank" rel="noopener" class="btn btn-ghost">Open Post ↗</a>` : ''}
+      ${l.owner_profile_url ? `<a href="${esc(l.owner_profile_url)}" target="_blank" rel="noopener" class="btn btn-ghost">Owner Profile ↗</a>` : ''}
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+    `;
+
+    document.getElementById('modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function closeModalOnOverlay(e) {
+    if (e.target === document.getElementById('modal')) closeModal();
+  }
+
+  /* ── Filter events ───────────────────────────── */
+  const debouncedSearch = debounce(() => {
+    state.search = document.getElementById('search-input').value.trim();
+    state.page   = 1;
+    fetchListings();
+  }, 350);
+
+  document.getElementById('search-input').addEventListener('input', debouncedSearch);
+
+  document.getElementById('type-filter').addEventListener('change', () => {
+    state.listing_type = document.getElementById('type-filter').value;
+    state.page = 1;
+    fetchListings();
+  });
+
+  document.getElementById('group-filter').addEventListener('change', () => {
+    state.group_id = document.getElementById('group-filter').value;
+    state.page = 1;
+    fetchListings();
+  });
+
+  document.getElementById('date-from').addEventListener('change', () => {
+    state.date_from = document.getElementById('date-from').value;
+    state.page = 1;
+    fetchListings();
+  });
+
+  document.getElementById('date-to').addEventListener('change', () => {
+    state.date_to = document.getElementById('date-to').value;
+    state.page = 1;
+    fetchListings();
+  });
+
+  function clearFilters() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('type-filter').value  = '';
+    document.getElementById('group-filter').value = '';
+    document.getElementById('date-from').value    = '';
+    document.getElementById('date-to').value      = '';
+    Object.assign(state, {
+      search: '', listing_type: '', group_id: '',
+      date_from: '', date_to: '', page: 1
+    });
+    fetchListings();
+  }
+
+  function changePerPage() {
+    state.limit = parseInt(document.getElementById('per-page').value);
+    state.page  = 1;
+    fetchListings();
+  }
+
+  /* ── Scrape trigger ──────────────────────────── */
+  async function triggerScrape() {
+    const btn = document.getElementById('btn-scrape');
+    try {
+      const res  = await fetch('/api/scrape', { method: 'POST' });
+      const data = await res.json();
+
+      if (res.status === 409) {
+        showToast('Scrape already in progress');
+      } else if (data.success) {
+        showToast(data.message || 'Scrape started!');
+        fetchScrapeStatus();
+      } else {
+        showToast(data.error || 'Failed to start scrape');
+      }
+    } catch (_) {
+      showToast('Failed to trigger scrape');
+    }
+  }
+
+  /* ── Scrape Status ───────────────────────────── */
+  let statusPollInterval = null;
+
+  async function fetchScrapeStatus() {
+    try {
+      const res = await fetch('/api/scrape/status');
+      const data = await res.json();
+      if (data.success) {
+        updateScrapeStatusUI(data.data);
+      }
+    } catch (_) {
+      document.getElementById('scrape-status-text').textContent = 'Error';
+    }
+  }
+
+  function updateScrapeStatusUI(status) {
+    const container = document.getElementById('scrape-status');
+    const textEl = document.getElementById('scrape-status-text');
+    const btn = document.getElementById('btn-scrape');
+
+    if (status.isRunning) {
+      container.classList.add('running');
+      container.innerHTML = `
+        <div class="spinner"></div>
+        <span class="scrape-status-value">Scraping in progress…</span>
+      `;
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+    } else {
+      container.classList.remove('running');
+
+      if (status.nextRun && status.timeUntilNextMs !== null) {
+        const timeLeft = formatTimeRemaining(status.timeUntilNextMs);
+        const nextRunTime = new Date(status.nextRun).toLocaleTimeString('en-US', {
+          hour: '2-digit', minute: '2-digit'
+        });
+        container.innerHTML = `
+          <span class="scrape-status-label">Next:</span>
+          <span class="scrape-status-value">${nextRunTime}</span>
+          <span class="scrape-status-label">(${timeLeft})</span>
+        `;
+      } else {
+        container.innerHTML = `
+          <span class="scrape-status-label">Next:</span>
+          <span class="scrape-status-value">—</span>
+        `;
+      }
+
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+  }
+
+  function formatTimeRemaining(ms) {
+    if (ms == null || ms < 0) return '—';
+    const totalMins = Math.floor(ms / 60000);
+    const hours = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    }
+    return `${mins}m`;
+  }
+
+  function startStatusPolling() {
+    fetchScrapeStatus();
+    statusPollInterval = setInterval(fetchScrapeStatus, 5000);
+  }
+
+  /* ── Auth ────────────────────────────────────── */
+  async function checkAuth() {
+    try {
+      const res = await fetch('/api/auth/me');
+      if (!res.ok) {
+        window.location.href = '/login.html';
+        return false;
+      }
+      const data = await res.json();
+      if (data.success && data.data) {
+        document.getElementById('user-name').textContent = data.data.username;
+        return true;
+      }
+      window.location.href = '/login.html';
+      return false;
+    } catch (_) {
+      window.location.href = '/login.html';
+      return false;
+    }
+  }
+
+  async function logout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (_) {}
+    window.location.href = '/login.html';
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  /* ── Keyboard ────────────────────────────────── */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  /* ── Init ────────────────────────────────────── */
+  (async () => {
+    // Apply saved view mode
+    updateViewToggleButtons();
+
+    const ok = await checkAuth();
+    if (ok) {
+      fetchGroups();
+      fetchListings();
+      startStatusPolling();
+    }
+  })();
+</script>
+</body>
+</html>
