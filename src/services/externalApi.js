@@ -21,6 +21,49 @@ class ExternalApiService {
   }
 
   /**
+   * Clean message content by removing Facebook UI noise and anti-scraping artifacts
+   */
+  cleanMessage(message) {
+    if (!message) return '';
+
+    let cleaned = message
+      // Remove all "Facebook" occurrences (anti-scraping noise)
+      .replace(/Facebook/gi, '')
+      // Remove single character lines (anti-scraping obfuscation)
+      .split('\n')
+      .filter(line => {
+        const trimmed = line.trim();
+        // Skip lines that are single chars, numbers, or symbols
+        if (trimmed.length <= 1) return false;
+        // Skip lines that are just whitespace
+        if (!trimmed.trim()) return false;
+        return true;
+      })
+      .join('\n')
+      // Remove UI elements and noise
+      .replace(/Write a public comment.*/gs, '')
+      .replace(/Write something\.\.\..*/gi, '')
+      .replace(/Like\s*Comment\s*Share/gi, '')
+      .replace(/Like\s*Reply\s*Share/gi, '')
+      .replace(/Like\s*Share/gi, '')
+      .replace(/See more|See less|See original|Rate this translation/gi, '')
+      .replace(/All reactions:?\s*\d*/gi, '')
+      .replace(/\d+\s*(comments?|reactions?|likes?|shares?)/gi, '')
+      .replace(/View more comments/gi, '')
+      .replace(/Submit your first comment.*/gi, '')
+      .replace(/·\s*Share\s*·\s*Edit/gi, '')
+      .replace(/\d+[mhdwy]\s*$/gim, '') // Time indicators like "5h", "2d"
+      .replace(/Edited\s*$/gim, '')
+      // Remove admin/moderator labels
+      .replace(/^(Admin|Moderator|Agorà Ammin)\s*$/gim, '')
+      // Clean up excessive newlines
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    return cleaned;
+  }
+
+  /**
    * Get headers for a request
    */
   getHeaders() {
@@ -49,8 +92,8 @@ class ExternalApiService {
   async upsertGroup(groupData) {
     try {
       const payload = {
-        facebook_group_id: groupData.facebook_group_id,
-        name: groupData.name,
+        facebook_group_id: groupData.facebook_group_id || '',
+        name: groupData.name || '',
         is_active: groupData.is_active ?? true,
         polling_interval_min: groupData.polling_interval_min || 60
       };
@@ -95,23 +138,26 @@ class ExternalApiService {
       // Extract group ID
       const facebookGroupId = group.facebook_group_id || this.extractGroupId(group.url);
 
+      // Clean the message content
+      const cleanedMessage = this.cleanMessage(listing.raw_content || listing.title);
+
       // Build the payload according to Section 5.5 spec
       const payload = {
         agency_id: DEFAULT_AGENCY_ID,
         group: {
-          facebook_group_id: facebookGroupId,
-          name: group.name
+          facebook_group_id: facebookGroupId || '',
+          name: group.name || ''
         },
         post: {
-          facebook_post_id: listing.post_id,
-          author_name: listing.owner_name,
-          message: listing.raw_content || listing.title,
-          post_type: postType,
-          property_type: propertyType,
-          permalink: listing.post_url
+          facebook_post_id: listing.post_id || '',
+          author_name: listing.owner_name || '',
+          message: cleanedMessage,
+          post_type: postType || '',
+          property_type: propertyType || '',
+          permalink: listing.post_url || ''
         },
-        prospect_contact: null,
-        news_lead: null
+        prospect_contact: {},
+        news_lead: {}
       };
 
       // Add prospect contact if we have name or contact info (Section 5.5 simplified structure)
@@ -128,9 +174,9 @@ class ExternalApiService {
       // Add news lead (Section 5.5 simplified structure)
       payload.news_lead = {
         title: listing.title || '',
-        description: listing.raw_content || '',
+        description: cleanedMessage,
         address: listing.location || '',
-        estimated_price: estimatedPrice,
+        estimated_price: estimatedPrice || 0,
         property_type: propertyType || 'residential'
       };
 
@@ -198,9 +244,9 @@ class ExternalApiService {
       const response = await this.axios.post(
         `${API_PREFIX}/posts/check-duplicate`,
         {
-          facebook_post_id: postId,
-          facebook_group_id: groupId,
-          permalink: permalink
+          facebook_post_id: postId || '',
+          facebook_group_id: groupId || '',
+          permalink: permalink || ''
         },
         { headers: this.getHeaders() }
       );
@@ -221,11 +267,11 @@ class ExternalApiService {
    * Parse a name into first and last name
    */
   parseName(fullName) {
-    if (!fullName) return { firstName: null, lastName: null };
+    if (!fullName) return { firstName: '', lastName: '' };
 
     const parts = fullName.trim().split(/\s+/);
     if (parts.length === 1) {
-      return { firstName: parts[0], lastName: null };
+      return { firstName: parts[0], lastName: '' };
     }
 
     return {
@@ -296,7 +342,7 @@ class ExternalApiService {
    * Extract Facebook group ID from URL
    */
   extractGroupId(url) {
-    if (!url) return null;
+    if (!url) return '';
 
     // Try to extract from URL patterns
     const match = url.match(/groups\/(\d+)/);
@@ -304,6 +350,96 @@ class ExternalApiService {
 
     // Return URL as fallback
     return url;
+  }
+
+  /**
+   * Ingest a comment using POST /posts endpoint (Section 5.2.2)
+   * Sends post data with comment object added
+   */
+  async ingestComment(comment, listing, group = null) {
+    try {
+      // Clean the comment message
+      const cleanedCommentMessage = this.cleanMessage(comment.content);
+
+      // Extract group ID
+      const facebookGroupId = group?.facebook_group_id || this.extractGroupId(group?.url) || '';
+
+      // Generate unique facebook_post_id for each comment
+      // Combine post_id with comment_id to ensure uniqueness
+      const uniquePostId = comment.comment_id
+        ? `${listing?.post_id || 'post'}_${comment.comment_id}`
+        : `${listing?.post_id || 'post'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Build the payload according to Section 5.2.2 with comment object
+      const payload = {
+        facebook_post_id: uniquePostId,
+        facebook_group_id: facebookGroupId,
+        author_name: listing?.owner_name || '',
+        message: this.cleanMessage(listing?.raw_content || listing?.title || ''),
+        post_type: this.mapPostType(listing?.listing_type) || 'selling',
+        property_type: listing?.property_type || this.detectPropertyType(listing?.raw_content) || 'residential',
+        permalink: listing?.post_url || '',
+        // Add comment object
+        comment: {
+          facebook_comment_id: comment.comment_id || '',
+          author_name: comment.author_name || '',
+          author_profile_url: comment.author_profile_url || '',
+          message: cleanedCommentMessage,
+          permalink: comment.post_url || listing?.post_url || ''
+        }
+      };
+
+      const url = `${API_BASE_URL}${API_PREFIX}/posts`;
+      const headers = this.getHeaders();
+
+      logger.info('=== External API Request (Comment) ===');
+      logger.info(`URL: ${url}`);
+      logger.info(`Headers: ${JSON.stringify({ ...this.axios.defaults.headers, ...headers })}`);
+      logger.info(`Payload: ${JSON.stringify(payload, null, 2)}`);
+
+      const response = await this.axios.post(
+        `${API_PREFIX}/posts`,
+        payload,
+        { headers }
+      );
+
+      // Log response
+      logger.info('=== External API Response (Comment) ===');
+      logger.info(`Status: ${response.status}`);
+      logger.info(`Data: ${JSON.stringify(response.data, null, 2)}`);
+
+      // Extract IDs from response
+      const responseData = response.data?.data || {};
+      const externalPostId = responseData.id || responseData.post?.id || '';
+      const externalCommentId = responseData.comment?.id || '';
+
+      return {
+        success: true,
+        data: response.data,
+        requestPayload: payload,
+        responsePayload: response.data,
+        externalIds: {
+          post_id: externalPostId,
+          comment_id: externalCommentId
+        }
+      };
+    } catch (error) {
+      // Log error details
+      logger.error('=== External API Error (Comment) ===');
+      logger.error(`URL: ${API_BASE_URL}${API_PREFIX}/posts`);
+      logger.error(`Message: ${error.message}`);
+      if (error.response) {
+        logger.error(`Status: ${error.response.status}`);
+        logger.error(`Response: ${JSON.stringify(error.response.data, null, 2)}`);
+      }
+
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+        requestPayload: { comment, listing, group },
+        responsePayload: error.response?.data || { error: error.message }
+      };
+    }
   }
 }
 

@@ -78,6 +78,12 @@ const Listing = {
     `).get(groupId, postId);
   },
 
+  findByPostIdOnly(postId) {
+    return db.prepare(`
+      SELECT * FROM listings WHERE post_id = ?
+    `).get(postId);
+  },
+
   findByExternalId(externalId) {
     return db.prepare(`
       SELECT * FROM listings WHERE external_id = ?

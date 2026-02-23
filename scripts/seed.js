@@ -10,7 +10,7 @@ const db = new Database(path.resolve(dbPath));
 // Disable foreign keys for drop operations
 db.pragma('foreign_keys = OFF');
 
-const VALID_TABLES = ['groups', 'listings', 'admins'];
+const VALID_TABLES = ['groups', 'listings', 'admins', 'comments'];
 
 function dropTable(tableName) {
   console.log(`Dropping table: ${tableName}...`);
@@ -18,7 +18,8 @@ function dropTable(tableName) {
   const indexDrops = {
     groups: ['idx_groups_is_active'],
     listings: ['idx_listings_group_id', 'idx_listings_listing_type', 'idx_listings_status'],
-    admins: []
+    admins: [],
+    comments: ['idx_comments_post_id', 'idx_comments_status']
   };
 
   // Drop indexes first
@@ -38,6 +39,7 @@ function dropAllTables() {
   console.log('Dropping all tables...');
 
   db.exec(`
+    DROP TABLE IF EXISTS comments;
     DROP TABLE IF EXISTS listings;
     DROP TABLE IF EXISTS groups;
     DROP TABLE IF EXISTS admins;
@@ -45,6 +47,8 @@ function dropAllTables() {
     DROP INDEX IF EXISTS idx_listings_listing_type;
     DROP INDEX IF EXISTS idx_listings_status;
     DROP INDEX IF EXISTS idx_groups_is_active;
+    DROP INDEX IF EXISTS idx_comments_post_id;
+    DROP INDEX IF EXISTS idx_comments_status;
   `);
 
   console.log('All tables dropped');
@@ -111,6 +115,33 @@ function createAdminsTable() {
   `);
 }
 
+function createCommentsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      listing_id INTEGER,
+      post_id TEXT NOT NULL,
+      post_url TEXT,
+      comment_id TEXT,
+      author_name TEXT,
+      author_profile_url TEXT,
+      content TEXT,
+      external_contact_id INTEGER,
+      external_lead_id INTEGER,
+      request_payload TEXT,
+      response_payload TEXT,
+      status TEXT DEFAULT 'pending',
+      error_message TEXT,
+      scraped_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE SET NULL,
+      UNIQUE(post_id, comment_id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status)`);
+}
+
 function createSchema(tables = null) {
   console.log('Creating schema...');
 
@@ -120,6 +151,7 @@ function createSchema(tables = null) {
   if (!tables || tables.includes('groups')) createGroupsTable();
   if (!tables || tables.includes('listings')) createListingsTable();
   if (!tables || tables.includes('admins')) createAdminsTable();
+  if (!tables || tables.includes('comments')) createCommentsTable();
 
   console.log('Schema created successfully');
 }

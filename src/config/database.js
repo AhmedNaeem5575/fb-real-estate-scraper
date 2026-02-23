@@ -103,6 +103,43 @@ function initialize() {
     CREATE INDEX IF NOT EXISTS idx_groups_is_active ON groups(is_active);
   `);
 
+  // Create comments table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      listing_id INTEGER,
+      post_id TEXT NOT NULL,
+      post_url TEXT,
+      comment_id TEXT,
+      author_name TEXT,
+      author_profile_url TEXT,
+      content TEXT,
+      external_contact_id INTEGER,
+      external_lead_id INTEGER,
+      request_payload TEXT,
+      response_payload TEXT,
+      status TEXT DEFAULT 'pending',
+      error_message TEXT,
+      scraped_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE,
+      UNIQUE(post_id, comment_id)
+    )
+  `);
+
+  // Add post_url column to comments if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE comments ADD COLUMN post_url TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Add indexes for comments
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
+    CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
+  `);
+
   // Create admins table
   db.exec(`
     CREATE TABLE IF NOT EXISTS admins (

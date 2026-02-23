@@ -3,10 +3,12 @@ const path = require('path');
 const logger = require('../utils/logger');
 const Group = require('../models/Group');
 const Listing = require('../models/Listing');
+const Comment = require('../models/Comment');
 const externalApi = require('./externalApi');
 
 const SESSION_PATH = process.env.SESSION_PATH || './playwright/session';
 const POSTS_PER_GROUP = parseInt(process.env.POSTS_PER_GROUP) || 50;
+const COMMENTS_PER_POST = parseInt(process.env.COMMENTS_PER_POST) || 10;
 
 // Dynamic import for clipboardy (ESM module)
 let clipboardy = null;
@@ -161,6 +163,11 @@ class Scraper {
       }
 
       logger.info(`Saved ${newCount} new listings, skipped ${skipCount} duplicates`);
+
+      // Scrape comments from ALL collected posts (not just new ones)
+      if (posts.length > 0) {
+        await this.scrapeCommentsFromPosts(page, posts);
+      }
 
       // Take final screenshot
       await page.screenshot({ path: `./data/debug_${group.id}.png` });
@@ -447,14 +454,31 @@ class Scraper {
   parseListingContent(content) {
     if (!content) return {};
 
-    // Clean up Facebook noise
+    // Clean up Facebook noise - aggressive cleaning
     let cleanContent = content
-      .replace(/(Facebook\n?)+/g, '') // Remove repeated "Facebook"
-      .replace(/^[a-z\d\s]{1,3}\n/gm, '') // Remove single char lines (anti-scraping obfuscation)
-      .replace(/Write a public comment.*/gs, '') // Remove comment prompts
-      .replace(/Like\nComment\nShare/g, '') // Remove action buttons
-      .replace(/See more|See less|See original|Rate this translation/g, '')
-      .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
+      // Remove all "Facebook" occurrences
+      .replace(/Facebook/gi, '')
+      // Remove single character lines (anti-scraping obfuscation)
+      .split('\n')
+      .filter(line => {
+        const trimmed = line.trim();
+        // Keep lines that are longer than 1 character
+        // Skip lines that are just single chars, numbers, or symbols
+        if (trimmed.length <= 1) return false;
+        // Skip lines that are just whitespace
+        if (!trimmed.trim()) return false;
+        return true;
+      })
+      .join('\n')
+      // Remove additional noise
+      .replace(/Write a public comment.*/gs, '')
+      .replace(/Like\nComment\nShare/g, '')
+      .replace(/See more|See less|See original|Rate this translation/gi, '')
+      .replace(/All reactions:?\s*\d*/gi, '')
+      .replace(/\d+\s*comments?/gi, '')
+      .replace(/View more comments/gi, '')
+      .replace(/Submit your first comment.*/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
 
     const lowerContent = cleanContent.toLowerCase();
@@ -660,6 +684,199 @@ class Scraper {
       await page.keyboard.press('Escape').catch(() => {});
       return null;
     }
+  }
+
+  // Scrape comments from posts
+  async scrapeCommentsFromPosts(page, posts) {
+    logger.info(`Scraping comments from ${posts.length} posts...`);
+
+    for (const post of posts) {
+      if (!post.post_url) continue;
+
+      try {
+        const listing = Listing.findByPostIdOnly(post.post_id);
+        if (!listing) continue;
+
+        // Navigate to the post
+        logger.info(`Navigating to post: ${post.post_url}`);
+        await page.goto(post.post_url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await this.randomDelay(3000, 5000);
+
+        // Extract comments
+        const comments = await this.extractCommentsFromPage(page, post.post_id, post.post_url);
+        logger.info(`Found ${comments.length} comments on post ${post.post_id}`);
+
+        // Save and send comments
+        for (const comment of comments) {
+          try {
+            const savedComment = Comment.upsert({
+              listing_id: listing.id,
+              post_id: post.post_id,
+              post_url: post.post_url,
+              comment_id: comment.comment_id,
+              author_name: comment.author_name,
+              author_profile_url: comment.author_profile_url,
+              content: comment.content,
+              status: 'pending'
+            });
+
+            // Send to external API
+            const result = await Comment.sendToExternalApi(savedComment.id);
+            if (result.success) {
+              logger.info(`Comment ${savedComment.id} sent to API`);
+            } else {
+              logger.warn(`Failed to send comment ${savedComment.id}: ${JSON.stringify(result.error)}`);
+            }
+          } catch (err) {
+            logger.error(`Error saving comment: ${err.message}`);
+          }
+
+          await this.randomDelay(300, 800);
+        }
+
+        // Navigate back to group
+        await page.goBack({ waitUntil: 'domcontentloaded', timeout: 30000 });
+        await this.randomDelay(2000, 3000);
+
+      } catch (err) {
+        logger.error(`Error scraping comments from post ${post.post_id}: ${err.message}`);
+      }
+    }
+  }
+
+  // Extract comments from the current page
+  async extractCommentsFromPage(page, postId, postUrl) {
+    const collectedComments = [];
+    const seen = new Set();
+    let scrollCount = 0;
+    const maxScrolls = 5;
+    let noNewCommentsCount = 0;
+    const maxScrollsWithoutNew = 2;
+
+    // Helper to generate a unique hash-based comment ID
+    const generateCommentId = (authorName, content) => {
+      const str = `${postId}_${authorName}_${content.substring(0, 100)}`;
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash = hash & hash;
+      }
+      return `${postId}_${Math.abs(hash)}`;
+    };
+
+    while (collectedComments.length < COMMENTS_PER_POST && scrollCount < maxScrolls) {
+      scrollCount++;
+
+      const comments = await page.evaluate(() => {
+        const results = [];
+        const seen = new Set();
+
+        const isUIElement = (text) => {
+          const lower = text.toLowerCase().trim();
+          const uiWords = ['like', 'reply', 'edit', 'delete', 'hide', 'share', 'comment', 'write', 'add', 'view', 'see'];
+          if (uiWords.includes(lower)) return true;
+          if (text.match(/^\d+[mhdwy]?$/)) return true;
+          return false;
+        };
+
+        const articles = document.querySelectorAll('[role="article"]');
+
+        articles.forEach((article, idx) => {
+          if (idx === 0) return; // Skip main post
+
+          try {
+            const text = (article.innerText || '').trim();
+            if (text.length < 10) return;
+
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+            if (lines.length < 2) return;
+
+            let authorName = '';
+            let authorUrl = '';
+            let contentLines = [];
+
+            for (let i = 0; i < Math.min(3, lines.length); i++) {
+              const line = lines[i];
+              if (line.length >= 2 && line.length <= 60 && !isUIElement(line)) {
+                if (line.includes(' ') || line.match(/^[A-Z]/)) {
+                  authorName = line;
+                  contentLines = lines.slice(i + 1);
+                  break;
+                }
+              }
+            }
+
+            if (!authorName) return;
+
+            // Find profile link
+            const allLinks = article.querySelectorAll('a[href]');
+            for (const link of allLinks) {
+              const href = link.href || '';
+              if (href.match(/facebook\.com\/groups\/\d+\/user\/\d+/)) {
+                authorUrl = href.split('?')[0];
+                break;
+              }
+              const linkText = (link.textContent || '').trim();
+              if (linkText === authorName && href.includes('facebook.com') && !href.includes('/posts/')) {
+                authorUrl = href.split('?')[0];
+                break;
+              }
+            }
+
+            let content = '';
+            for (const line of contentLines) {
+              if (isUIElement(line)) continue;
+              if (line === authorName) continue;
+              content = line;
+              break;
+            }
+
+            if (!content || content.length < 1) return;
+
+            const key = `${authorName}_${content.substring(0, 30)}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+
+            results.push({
+              author_name: authorName,
+              author_profile_url: authorUrl,
+              content: content.substring(0, 2000)
+            });
+          } catch (e) {}
+        });
+
+        return results;
+      });
+
+      const beforeCount = collectedComments.length;
+
+      for (const comment of comments) {
+        const key = `${comment.author_name}_${comment.content.substring(0, 50)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          // Generate unique comment ID based on post_id, author, and content
+          comment.comment_id = generateCommentId(comment.author_name, comment.content);
+          collectedComments.push(comment);
+          if (collectedComments.length >= COMMENTS_PER_POST) break;
+        }
+      }
+
+      const newCount = collectedComments.length - beforeCount;
+
+      if (collectedComments.length >= COMMENTS_PER_POST) break;
+
+      if (newCount === 0) {
+        noNewCommentsCount++;
+        if (noNewCommentsCount >= maxScrollsWithoutNew) break;
+      } else {
+        noNewCommentsCount = 0;
+      }
+
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+      await this.randomDelay(1500, 2500);
+    }
+
+    return collectedComments;
   }
 }
 
