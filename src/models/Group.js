@@ -15,6 +15,34 @@ const Group = {
     return db.prepare('SELECT * FROM groups WHERE facebook_group_id = ?').get(facebookGroupId);
   },
 
+  findByUrl(url) {
+    return db.prepare('SELECT * FROM groups WHERE url = ?').get(url);
+  },
+
+  /**
+   * Find group by facebook_group_id OR url
+   * @param {Object} params - Search parameters
+   * @param {string} params.facebook_group_id - Facebook group ID
+   * @param {string} params.url - Group URL
+   * @returns {Object|null} Group record or null
+   */
+  findByFacebookIdOrUrl(params) {
+    const { facebook_group_id, url } = params;
+
+    // Try by facebook_group_id first
+    if (facebook_group_id) {
+      const group = this.findByFacebookGroupId(facebook_group_id);
+      if (group) return group;
+    }
+
+    // Fall back to URL
+    if (url) {
+      return this.findByUrl(url);
+    }
+
+    return null;
+  },
+
   findActive() {
     return db.prepare('SELECT * FROM groups WHERE is_active = 1').all();
   },
@@ -156,6 +184,85 @@ const Group = {
       logger.error('Error syncing groups from API:', error.message);
       return [];
     }
+  },
+
+  /**
+   * Sync groups from CRM data
+   * @param {Array} crmGroups - Array of group objects from CRM
+   * @returns {Object} Sync results { added, updated }
+   */
+  syncFromCrm(crmGroups) {
+    const results = { added: 0, updated: 0 };
+
+    if (!Array.isArray(crmGroups)) {
+      logger.error('syncFromCrm: crmGroups must be an array');
+      return results;
+    }
+
+    for (const crmGroup of crmGroups) {
+      try {
+        // Check by facebook_group_id OR url
+        const existing = this.findByFacebookIdOrUrl({
+          facebook_group_id: crmGroup.facebook_group_id,
+          url: crmGroup.url
+        });
+
+        if (existing) {
+          // Update existing group
+          this.update(existing.id, {
+            external_id: crmGroup.id,
+            facebook_group_id: crmGroup.facebook_group_id || existing.facebook_group_id,
+            url: crmGroup.url || existing.url,
+            name: crmGroup.name || existing.name,
+            is_active: crmGroup.is_active !== undefined ? (crmGroup.is_active ? 1 : 0) : existing.is_active,
+            polling_interval_min: crmGroup.polling_interval_min || existing.polling_interval_min
+          });
+          results.updated++;
+        } else {
+          // Create new group
+          this.create({
+            external_id: crmGroup.id,
+            facebook_group_id: crmGroup.facebook_group_id,
+            url: crmGroup.url || (crmGroup.facebook_group_id ? `https://www.facebook.com/groups/${crmGroup.facebook_group_id}` : null),
+            name: crmGroup.name,
+            is_active: crmGroup.is_active !== undefined ? (crmGroup.is_active ? 1 : 0) : 1,
+            polling_interval_min: crmGroup.polling_interval_min || 60
+          });
+          results.added++;
+        }
+      } catch (err) {
+        const identifier = crmGroup.facebook_group_id || crmGroup.url || 'unknown';
+        logger.error(`Error syncing CRM group ${identifier}: ${err.message}`);
+      }
+    }
+
+    logger.info(`syncFromCrm: ${results.added} added, ${results.updated} updated`);
+    return results;
+  },
+
+  /**
+   * Mark a group as inactive by Facebook group ID or URL
+   * @param {string} identifier - Facebook group ID or URL
+   * @param {string} reason - Reason for deactivation
+   */
+  markInactiveByFacebookId(identifier, reason) {
+    // Try to find by facebook_group_id first
+    let group = this.findByFacebookGroupId(identifier);
+
+    // If not found, try by URL
+    if (!group && identifier?.includes('facebook.com')) {
+      group = this.findByUrl(identifier);
+    }
+
+    if (!group) {
+      logger.warn(`Cannot mark inactive: group ${identifier} not found`);
+      return null;
+    }
+
+    logger.info(`Marking group ${identifier} as inactive. Reason: ${reason}`);
+    return this.update(group.id, {
+      is_active: 0
+    });
   }
 };
 

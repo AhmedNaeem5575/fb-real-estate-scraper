@@ -150,6 +150,32 @@ function initialize() {
     )
   `);
 
+  // Create operational_state table for bot operational control
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS operational_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      can_operate INTEGER DEFAULT 0,
+      manual_blocked INTEGER DEFAULT 0,
+      daily_enabled INTEGER DEFAULT 0,
+      daily_flag_date TEXT,
+      reason TEXT,
+      last_checked TEXT,
+      api_key_valid INTEGER DEFAULT 1,
+      cached_can_operate INTEGER DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Seed default operational state if not exists
+  const opStateExists = db.prepare("SELECT id FROM operational_state WHERE id = 1").get();
+  if (!opStateExists) {
+    db.prepare(`
+      INSERT INTO operational_state (id, can_operate, manual_blocked, daily_enabled, api_key_valid, cached_can_operate)
+      VALUES (1, 0, 0, 0, 1, 0)
+    `).run();
+    logger.info('Default operational state seeded');
+  }
+
   // Seed default admin (username: admin, password: admin)
   const adminExists = db.prepare("SELECT id FROM admins WHERE username = 'admin'").get();
   if (!adminExists) {

@@ -1,11 +1,13 @@
 const cron = require('node-cron');
 const scraper = require('./scraper');
+const operationalControl = require('./operationalControl');
 const logger = require('../utils/logger');
 
 const INTERVAL_HOURS = parseInt(process.env.SCRAPE_INTERVAL_HOURS) || 4;
 
 let scheduledTask = null;
 let isRunning = false;
+let isPaused = false;
 let lastRun = null;
 let lastRunError = null;
 let nextRunTime = null;
@@ -34,6 +36,22 @@ function start() {
 
   scheduledTask = cron.schedule(cronExpression, async () => {
     logger.info('Scheduled scrape job triggered');
+
+    // Check if paused
+    if (isPaused) {
+      logger.info('Scheduler is paused, skipping scrape job');
+      return;
+    }
+
+    // Check operational status
+    if (!operationalControl.canOperate()) {
+      const state = operationalControl.getState();
+      logger.warn(`Scrape job skipped - bot not authorized. Reason: ${state.reason || 'Unknown'}`);
+      lastRunError = `Bot not authorized: ${state.reason || 'Unknown'}`;
+      nextRunTime = calculateNextRun();
+      return;
+    }
+
     isRunning = true;
     lastRunError = null;
     try {
@@ -63,6 +81,12 @@ async function runNow() {
     throw new Error('Scrape already in progress');
   }
 
+  // Check operational status for manual triggers too
+  if (!operationalControl.canOperate()) {
+    const state = operationalControl.getState();
+    throw new Error(`Bot not authorized: ${state.reason || 'Unknown'}`);
+  }
+
   logger.info('Manual scrape triggered');
   isRunning = true;
   lastRunError = null;
@@ -79,6 +103,22 @@ async function runNow() {
   }
 }
 
+/**
+ * Pause the scheduler (skip scheduled jobs)
+ */
+function pause() {
+  isPaused = true;
+  logger.info('Scheduler paused');
+}
+
+/**
+ * Resume the scheduler
+ */
+function resume() {
+  isPaused = false;
+  logger.info('Scheduler resumed');
+}
+
 function getStatus() {
   const now = new Date();
   let timeUntilNext = null;
@@ -89,6 +129,8 @@ function getStatus() {
 
   return {
     isRunning,
+    isPaused,
+    canOperate: operationalControl.canOperate(),
     lastRun: lastRun ? lastRun.toISOString() : null,
     lastRunError,
     nextRun: nextRunTime ? nextRunTime.toISOString() : null,
@@ -101,5 +143,7 @@ module.exports = {
   start,
   stop,
   runNow,
+  pause,
+  resume,
   getStatus
 };

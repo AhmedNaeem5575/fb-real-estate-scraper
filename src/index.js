@@ -5,8 +5,11 @@ const express = require('express');
 const routes = require('./routes');
 const scheduler = require('./services/scheduler');
 const scraper = require('./services/scraper');
+const operationalControl = require('./services/operationalControl');
+const groupSync = require('./services/groupSync');
 const logger = require('./utils/logger');
 const { getSession } = require('./middleware/auth');
+const { initialize } = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -61,6 +64,9 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// Mount webhook routes (no /api prefix, uses its own Bearer token auth)
+app.use('/webhook', require('./routes/webhook'));
+
 // API routes
 app.use('/api', routes);
 
@@ -106,6 +112,7 @@ app.use((err, req, res, next) => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received. Shutting down gracefully...');
+  operationalControl.stopAll();
   scheduler.stop();
   await scraper.close();
   process.exit(0);
@@ -113,6 +120,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received. Shutting down gracefully...');
+  operationalControl.stopAll();
   scheduler.stop();
   await scraper.close();
   process.exit(0);
@@ -121,6 +129,18 @@ process.on('SIGINT', async () => {
 // Start server
 async function start() {
   try {
+    await initialize();
+
+    // Initialize operational control service
+    await operationalControl.initialize();
+    operationalControl.setDependencies(scraper, scheduler);
+
+    // Start daily check at 01:00 and hourly ping
+    operationalControl.startDailyCheck();
+    operationalControl.startHourlyPing();
+
+    // Initial group sync from CRM
+    await groupSync.refreshGroups();
 
     // Start scheduler
     scheduler.start();
@@ -137,6 +157,9 @@ async function start() {
       logger.info('  GET    /api/groups      - List all groups');
       logger.info('  GET    /api/listings    - List all listings');
       logger.info('  POST   /api/scrape      - Trigger manual scrape');
+      logger.info('Webhook endpoints:');
+      logger.info('  POST   /webhook/status  - Receive status updates from CRM');
+      logger.info('  GET    /webhook/health  - Webhook health check');
     });
   } catch (error) {
     logger.error('Failed to start server:', error.message);

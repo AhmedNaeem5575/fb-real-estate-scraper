@@ -441,6 +441,152 @@ class ExternalApiService {
       };
     }
   }
+
+  // ===========================================
+  // Operational Control API Methods
+  // ===========================================
+
+  /**
+   * Get bot operational status from CRM
+   * GET /api/v1/facebook-bot/status
+   */
+  async getBotStatus() {
+    try {
+      const response = await this.axios.get(
+        '/api/v1/facebook-bot/status',
+        { headers: this.getHeaders(), timeout: 10000 }
+      );
+
+      return {
+        success: true,
+        data: response.data?.data || response.data,
+        status: response.status
+      };
+    } catch (error) {
+      const is401 = error.response?.status === 401;
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+        isUnauthorized: is401
+      };
+    }
+  }
+
+  /**
+   * Ping CRM to check operational status (hourly check)
+   * GET /api/v1/facebook-bot/ping
+   */
+  async pingBot() {
+    try {
+      const response = await this.axios.get(
+        '/api/v1/facebook-bot/ping',
+        { headers: this.getHeaders(), timeout: 10000 }
+      );
+
+      return {
+        success: true,
+        data: response.data?.data || response.data,
+        status: response.status
+      };
+    } catch (error) {
+      const is401 = error.response?.status === 401;
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+        isUnauthorized: is401
+      };
+    }
+  }
+
+  /**
+   * Get Facebook groups from CRM
+   * GET /api/v1/facebook-groups
+   * @param {boolean} activeOnly - If true, only return active groups
+   */
+  async getFacebookGroups(activeOnly = true) {
+    try {
+      const params = activeOnly ? { is_active: 1 } : {};
+      const response = await this.axios.get(
+        '/api/v1/facebook-groups',
+        { params, headers: this.getHeaders(), timeout: 10000 }
+      );
+
+      return {
+        success: true,
+        data: response.data?.data || response.data,
+        status: response.status
+      };
+    } catch (error) {
+      const is401 = error.response?.status === 401;
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+        isUnauthorized: is401
+      };
+    }
+  }
+
+  /**
+   * Update a Facebook group in CRM
+   * PUT /api/v1/facebook-groups/{id}
+   * @param {number} id - Group ID in CRM
+   * @param {Object} updates - Fields to update
+   */
+  async updateFacebookGroup(id, updates) {
+    try {
+      const response = await this.axios.put(
+        `/api/v1/facebook-groups/${id}`,
+        updates,
+        { headers: this.getHeaders(), timeout: 10000 }
+      );
+
+      return {
+        success: true,
+        data: response.data?.data || response.data,
+        status: response.status
+      };
+    } catch (error) {
+      const is401 = error.response?.status === 401;
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+        isUnauthorized: is401
+      };
+    }
+  }
+
+  /**
+   * Register a new Facebook group in CRM
+   * POST /api/v1/facebook-groups
+   * @param {Object} data - Group data to register
+   */
+  async registerFacebookGroup(data) {
+    try {
+      const response = await this.axios.post(
+        '/api/v1/facebook-groups',
+        data,
+        { headers: this.getHeaders(), timeout: 10000 }
+      );
+
+      return {
+        success: true,
+        data: response.data?.data || response.data,
+        status: response.status
+      };
+    } catch (error) {
+      const is401 = error.response?.status === 401;
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+        isUnauthorized: is401
+      };
+    }
+  }
 }
 
 module.exports = new ExternalApiService();

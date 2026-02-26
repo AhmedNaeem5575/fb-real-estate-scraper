@@ -5,6 +5,8 @@ const Group = require('../models/Group');
 const Listing = require('../models/Listing');
 const Comment = require('../models/Comment');
 const externalApi = require('./externalApi');
+const operationalControl = require('./operationalControl');
+const groupSync = require('./groupSync');
 
 const SESSION_PATH = process.env.SESSION_PATH || './playwright/session';
 const POSTS_PER_GROUP = parseInt(process.env.POSTS_PER_GROUP) || 50;
@@ -23,6 +25,22 @@ class Scraper {
   constructor() {
     this.context = null;
     this.isRunning = false;
+    this.stopRequested = false;
+  }
+
+  /**
+   * Request the scraper to stop at the next checkpoint
+   */
+  requestStop() {
+    logger.info('Stop requested for scraper');
+    this.stopRequested = true;
+  }
+
+  /**
+   * Reset stop flag
+   */
+  resetStopFlag() {
+    this.stopRequested = false;
   }
 
   async initialize() {
@@ -58,16 +76,35 @@ class Scraper {
       return;
     }
 
+    // Check operational status before starting
+    if (!operationalControl.canOperate()) {
+      const state = operationalControl.getState();
+      logger.warn(`Scraper not starting - bot not authorized. Reason: ${state.reason || 'Unknown'}`);
+      return;
+    }
+
     this.isRunning = true;
+    this.stopRequested = false;
     logger.info('Starting scrape job for all active groups...');
 
     try {
-      await this.initialize();
-
       const groups = Group.findActive();
       logger.info(`Found ${groups.length} active groups to scrape`);
 
       for (const group of groups) {
+        // Check if stop was requested
+        if (this.stopRequested) {
+          logger.warn('Stop requested, halting scrape job');
+          break;
+        }
+
+        // Check operational status during scraping
+        if (!operationalControl.canOperate()) {
+          const state = operationalControl.getState();
+          logger.warn(`Scrape job halted - bot not authorized. Reason: ${state.reason || 'Unknown'}`);
+          break;
+        }
+
         try {
           await this.scrapeGroup(group);
           Group.updateLastScraped(group.id);
@@ -75,6 +112,11 @@ class Scraper {
           await this.randomDelay(5000, 10000);
         } catch (error) {
           logger.error(`Error scraping group ${group.id}:`, error.message);
+
+          // Report group error to CRM (e.g., access denied)
+          if (error.message.includes('access') || error.message.includes('permission') || error.message.includes('login')) {
+            await this.reportGroupAccessError(group, error.message);
+          }
         }
       }
 
@@ -83,7 +125,22 @@ class Scraper {
       logger.error('Scrape job failed:', error.message);
     } finally {
       this.isRunning = false;
+      this.stopRequested = false;
       await this.close();
+    }
+  }
+
+  /**
+   * Report group access error to CRM via groupSync
+   */
+  async reportGroupAccessError(group, errorMessage) {
+    try {
+      if (groupSync && groupSync.reportGroupError) {
+        await groupSync.reportGroupError(group.facebook_group_id, errorMessage);
+        logger.info(`Reported error for group ${group.facebook_group_id}`);
+      }
+    } catch (err) {
+      logger.error(`Failed to report group error: ${err.message}`);
     }
   }
 
