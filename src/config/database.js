@@ -84,7 +84,8 @@ function initialize() {
   const groupsColumnsToAdd = [
     'external_id INTEGER',
     'facebook_group_id TEXT',
-    'polling_interval_min INTEGER DEFAULT 60'
+    'polling_interval_min INTEGER DEFAULT 60',
+    'endpoint TEXT'
   ];
 
   for (const col of groupsColumnsToAdd) {

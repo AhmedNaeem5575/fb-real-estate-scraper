@@ -86,7 +86,8 @@ class GroupSyncService {
       for (const crmGroup of crmGroups) {
         try {
           const facebookGroupId = crmGroup.facebook_group_id?.toString() || null;
-          const groupUrl = crmGroup.url || null;
+          const groupUrl = crmGroup.facebook_url || crmGroup.url || null;
+          const endpoint = crmGroup.endpoint || null;
 
           // Track what we've seen
           if (facebookGroupId) seenCrmGroupIds.add(facebookGroupId);
@@ -109,7 +110,8 @@ class GroupSyncService {
               url: groupUrl || localGroup.url,
               name: crmGroup.name,
               is_active: crmGroup.is_active ? 1 : 0,
-              polling_interval_min: crmGroup.polling_interval_min
+              polling_interval_min: crmGroup.polling_interval_min,
+              endpoint: endpoint || localGroup.endpoint
             });
             results.updated++;
           } else {
@@ -120,7 +122,8 @@ class GroupSyncService {
               url: groupUrl || (facebookGroupId ? `https://www.facebook.com/groups/${facebookGroupId}` : null),
               name: crmGroup.name,
               is_active: crmGroup.is_active ? 1 : 0,
-              polling_interval_min: crmGroup.polling_interval_min || 60
+              polling_interval_min: crmGroup.polling_interval_min || 60,
+              endpoint: endpoint
             });
             results.added++;
           }

@@ -49,8 +49,8 @@ const Group = {
 
   create(data) {
     const stmt = db.prepare(`
-      INSERT INTO groups (external_id, facebook_group_id, url, name, is_active, polling_interval_min)
-      VALUES (@external_id, @facebook_group_id, @url, @name, @is_active, @polling_interval_min)
+      INSERT INTO groups (external_id, facebook_group_id, url, name, is_active, polling_interval_min, endpoint)
+      VALUES (@external_id, @facebook_group_id, @url, @name, @is_active, @polling_interval_min, @endpoint)
     `);
 
     const result = stmt.run({
@@ -59,7 +59,8 @@ const Group = {
       url: data.url || null,
       name: data.name || null,
       is_active: data.is_active !== undefined ? data.is_active : 1,
-      polling_interval_min: data.polling_interval_min || 60
+      polling_interval_min: data.polling_interval_min || 60,
+      endpoint: data.endpoint || null
     });
 
     return this.findById(result.lastInsertRowid);
@@ -81,7 +82,8 @@ const Group = {
           external_id = @external_id,
           name = COALESCE(@name, name),
           is_active = COALESCE(@is_active, is_active),
-          polling_interval_min = COALESCE(@polling_interval_min, polling_interval_min)
+          polling_interval_min = COALESCE(@polling_interval_min, polling_interval_min),
+          endpoint = COALESCE(@endpoint, endpoint)
         WHERE id = @id
       `);
 
@@ -90,7 +92,8 @@ const Group = {
         external_id: data.external_id || existing.external_id,
         name: data.name || existing.name,
         is_active: data.is_active !== undefined ? data.is_active : existing.is_active,
-        polling_interval_min: data.polling_interval_min || existing.polling_interval_min
+        polling_interval_min: data.polling_interval_min || existing.polling_interval_min,
+        endpoint: data.endpoint || existing.endpoint
       });
 
       return this.findById(existing.id);
@@ -130,6 +133,10 @@ const Group = {
     if (data.last_scraped !== undefined) {
       fields.push('last_scraped = @last_scraped');
       values.last_scraped = data.last_scraped;
+    }
+    if (data.endpoint !== undefined) {
+      fields.push('endpoint = @endpoint');
+      values.endpoint = data.endpoint;
     }
 
     if (fields.length === 0) return this.findById(id);
@@ -212,10 +219,11 @@ const Group = {
           this.update(existing.id, {
             external_id: crmGroup.id,
             facebook_group_id: crmGroup.facebook_group_id || existing.facebook_group_id,
-            url: crmGroup.url || existing.url,
+            url: crmGroup.facebook_url || crmGroup.url || existing.url,
             name: crmGroup.name || existing.name,
             is_active: crmGroup.is_active !== undefined ? (crmGroup.is_active ? 1 : 0) : existing.is_active,
-            polling_interval_min: crmGroup.polling_interval_min || existing.polling_interval_min
+            polling_interval_min: crmGroup.polling_interval_min || existing.polling_interval_min,
+            endpoint: crmGroup.endpoint || existing.endpoint
           });
           results.updated++;
         } else {
@@ -223,10 +231,11 @@ const Group = {
           this.create({
             external_id: crmGroup.id,
             facebook_group_id: crmGroup.facebook_group_id,
-            url: crmGroup.url || (crmGroup.facebook_group_id ? `https://www.facebook.com/groups/${crmGroup.facebook_group_id}` : null),
+            url: crmGroup.facebook_url || crmGroup.url || (crmGroup.facebook_group_id ? `https://www.facebook.com/groups/${crmGroup.facebook_group_id}` : null),
             name: crmGroup.name,
             is_active: crmGroup.is_active !== undefined ? (crmGroup.is_active ? 1 : 0) : 1,
-            polling_interval_min: crmGroup.polling_interval_min || 60
+            polling_interval_min: crmGroup.polling_interval_min || 60,
+            endpoint: crmGroup.endpoint || null
           });
           results.added++;
         }

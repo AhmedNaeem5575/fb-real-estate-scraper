@@ -180,19 +180,31 @@ class ExternalApiService {
         property_type: propertyType || 'residential'
       };
 
-      const url = `${API_BASE_URL}${API_PREFIX}/ingest`;
+      // Use group-specific endpoint or fall back to default
+      const baseUrl = group.endpoint || API_BASE_URL;
+      const url = `${baseUrl}${API_PREFIX}/ingest`;
       const headers = this.getHeaders();
 
       // Log request details
       logger.info('=== External API Request ===');
       logger.info(`URL: ${url}`);
+      logger.info(`Group Endpoint: ${group.endpoint || 'using default'}`);
       logger.info(`Headers: ${JSON.stringify({ ...this.axios.defaults.headers, ...headers })}`);
       logger.info(`Payload: ${JSON.stringify(payload, null, 2)}`);
 
-      const response = await this.axios.post(
-        `${API_PREFIX}/ingest`,
+      // Create a custom axios instance for this request if using custom endpoint
+      const response = await axios.post(
+        url,
         payload,
-        { headers }
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Api-Key': API_KEY,
+            ...headers
+          },
+          timeout: 30000
+        }
       );
 
       // Log response
@@ -389,18 +401,30 @@ class ExternalApiService {
         }
       };
 
-      const url = `${API_BASE_URL}${API_PREFIX}/posts`;
+      // Use group-specific endpoint or fall back to default
+      const baseUrl = group?.endpoint || API_BASE_URL;
+      const url = `${baseUrl}${API_PREFIX}/posts`;
       const headers = this.getHeaders();
 
       logger.info('=== External API Request (Comment) ===');
       logger.info(`URL: ${url}`);
+      logger.info(`Group Endpoint: ${group?.endpoint || 'using default'}`);
       logger.info(`Headers: ${JSON.stringify({ ...this.axios.defaults.headers, ...headers })}`);
       logger.info(`Payload: ${JSON.stringify(payload, null, 2)}`);
 
-      const response = await this.axios.post(
-        `${API_PREFIX}/posts`,
+      // Create a custom axios request with custom endpoint
+      const response = await axios.post(
+        url,
         payload,
-        { headers }
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Api-Key': API_KEY,
+            ...headers
+          },
+          timeout: 30000
+        }
       );
 
       // Log response
@@ -425,8 +449,9 @@ class ExternalApiService {
       };
     } catch (error) {
       // Log error details
+      const baseUrl = group?.endpoint || API_BASE_URL;
       logger.error('=== External API Error (Comment) ===');
-      logger.error(`URL: ${API_BASE_URL}${API_PREFIX}/posts`);
+      logger.error(`URL: ${baseUrl}${API_PREFIX}/posts`);
       logger.error(`Message: ${error.message}`);
       if (error.response) {
         logger.error(`Status: ${error.response.status}`);

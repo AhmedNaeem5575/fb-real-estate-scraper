@@ -88,6 +88,8 @@ class Scraper {
     logger.info('Starting scrape job for all active groups...');
 
     try {
+      await this.initialize();
+
       const groups = Group.findActive();
       logger.info(`Found ${groups.length} active groups to scrape`);
 
