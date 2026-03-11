@@ -250,6 +250,9 @@ class Scraper {
       scrollCount++;
       logger.info(`Scroll #${scrollCount} - Current posts: ${collectedPosts.size}/${POSTS_PER_GROUP}`);
 
+      // Expand "See more" buttons before extracting posts
+      await this.expandAllSeeMoreButtons(page);
+
       // Extract current posts from page
       const posts = await this.extractPostsFromPage(page);
 
@@ -305,6 +308,47 @@ class Scraper {
       await this.randomDelay(1500, 3500);
     }
 
+    // Second pass: Retry empty URLs with different methods
+    logger.info('Starting second pass to retry empty URLs...');
+    let retryCount = 0;
+    let successCount = 0;
+
+    for (const [postId, post] of collectedPosts) {
+      if (!post.post_url || post.post_url.startsWith('hash_')) {
+        retryCount++;
+
+        // Method 1: Retry getPostUrlByIndex with more attempts
+        let url = await this.getPostUrlByIndex(page, post.element_index, 3);
+
+        // Method 2: Try to construct URL from post ID if we have groupId
+        if (!url && group && group.facebook_group_id) {
+          url = this.constructPostUrlFromId(postId, group.facebook_group_id);
+          if (url) {
+            logger.info(`Constructed URL from post ID: ${url}`);
+          }
+        }
+
+        if (url) {
+          post.post_url = url;
+          // Update post_id from URL if we got a real one
+          const postsMatch = url.match(/\/posts\/(\d+)/);
+          const permalinkMatch = url.match(/\/permalink\/(\d+)/);
+          const pfbidMatch = url.match(/(pfbid[a-zA-Z0-9]+)/);
+          if (postsMatch) {
+            post.post_id = postsMatch[1];
+          } else if (permalinkMatch) {
+            post.post_id = permalinkMatch[1];
+          } else if (pfbidMatch) {
+            post.post_id = pfbidMatch[1];
+          }
+          successCount++;
+          logger.info(`Successfully retrieved URL on retry for post ${postId}`);
+        }
+      }
+    }
+
+    logger.info(`URL retry complete: ${successCount}/${retryCount} URLs recovered`);
+
     return Array.from(collectedPosts.values());
   }
 
@@ -334,6 +378,19 @@ class Scraper {
 
         postElements.forEach((el, index) => {
           try {
+            // Click "See more" buttons to expand content before extraction
+            // Supports multiple languages: English, Italian, Spanish, French, German, etc.
+            const seeMoreButtons = el.querySelectorAll('[role="button"], span[dir="auto"], div[role="button"]');
+            for (const btn of seeMoreButtons) {
+              const btnText = (btn.textContent || '').trim().toLowerCase();
+              if (btnText === 'see more' || btnText === 'see original' || btnText === 'continue reading' ||
+                  btnText === 'altro' || btnText === 'ver más' || btnText === 'ver mais' ||
+                  btnText === 'voir plus' || btnText === 'mehr anzeigen' || btnText === 'vedi altro' ||
+                  btnText === 'afficher la suite' || btnText === 'mostra altro' || btnText === 'ler mais') {
+                try { btn.click(); } catch(e) {}
+              }
+            }
+
             // Try innerText first, then textContent
             const text = el.innerText || el.textContent || '';
 
@@ -676,73 +733,170 @@ class Scraper {
     await page.mouse.move(x, y, { steps: Math.floor(Math.random() * 10) + 5 });
   }
 
-  // Get URL for a specific post by its feed index
-  async getPostUrlByIndex(page, index) {
-    try {
-      const feedContainer = await page.$('[role="feed"]');
-      if (!feedContainer) return null;
+  // Get URL for a specific post by its feed index (with retry logic)
+  async getPostUrlByIndex(page, index, maxRetries = 2) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        logger.info(`Getting URL for post ${index} (attempt ${attempt}/${maxRetries})`);
 
-      const postEls = await feedContainer.$$('> div');
-      const postEl = postEls[index];
-      if (!postEl) return null;
-
-      // Scroll into view
-      await postEl.scrollIntoViewIfNeeded();
-      await this.randomDelay(300, 500);
-
-      // Click share button
-      const shareClicked = await postEl.evaluate((el) => {
-        const btns = el.querySelectorAll('div[role="button"]');
-        for (const b of btns) {
-          if (b.textContent?.toLowerCase().includes('share')) {
-            b.click();
-            return true;
-          }
+        const feedContainer = await page.$('[role="feed"]');
+        if (!feedContainer) {
+          logger.warn('Feed container not found');
+          continue;
         }
-        return false;
-      });
 
-      if (!shareClicked) return null;
-      await this.randomDelay(1500, 2000);
-
-      // Click "Copy link"
-      const copyClicked = await page.evaluate(() => {
-        const dialog = document.querySelector('[role="dialog"]');
-        if (!dialog) return false;
-
-        const items = dialog.querySelectorAll('[role="button"], [tabindex], div[dir]');
-        for (const item of items) {
-          const txt = (item.textContent || '').trim();
-          if (txt === 'Copy link') {
-            item.click();
-            return true;
-          }
+        const postEls = await feedContainer.$$('> div');
+        const postEl = postEls[index];
+        if (!postEl) {
+          logger.warn(`Post element at index ${index} not found`);
+          continue;
         }
-        return false;
-      });
 
-      if (!copyClicked) {
+        // Scroll into view
+        await postEl.scrollIntoViewIfNeeded();
+        await this.randomDelay(300, 500);
+
+        // Click share button
+        const shareClicked = await postEl.evaluate((el) => {
+          const btns = el.querySelectorAll('div[role="button"]');
+          for (const b of btns) {
+            if (b.textContent?.toLowerCase().includes('share')) {
+              b.click();
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (!shareClicked) {
+          logger.warn(`Share button not found for post ${index}`);
+          continue;
+        }
+        await this.randomDelay(1500, 2000);
+
+        // Click "Copy link"
+        const copyClicked = await page.evaluate(() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          if (!dialog) return false;
+
+          const items = dialog.querySelectorAll('[role="button"], [tabindex], div[dir]');
+          for (const item of items) {
+            const txt = (item.textContent || '').trim();
+            if (txt === 'Copy link') {
+              item.click();
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (!copyClicked) {
+          logger.warn(`Copy link button not found for post ${index}`);
+          await page.keyboard.press('Escape');
+          continue;
+        }
+
+        // Wait for clipboard
+        await this.delay(800);
+
+        // Read clipboard (using dynamic import for ESM module)
+        const clip = await getClipboardy();
+        const url = await clip.read();
+
+        // Close dialog
         await page.keyboard.press('Escape');
-        return null;
+        await this.randomDelay(200, 400);
+
+        if (url && url.includes('facebook.com')) {
+          logger.info(`Successfully got URL for post ${index}: ${url}`);
+          return url;
+        } else {
+          logger.warn(`Invalid URL from clipboard: ${url}`);
+        }
+
+      } catch (err) {
+        logger.error(`Error getting URL for post ${index} (attempt ${attempt}): ${err.message}`);
+        await page.keyboard.press('Escape').catch(() => {});
       }
 
-      // Wait for clipboard
-      await this.delay(800);
-
-      // Read clipboard (using dynamic import for ESM module)
-      const clip = await getClipboardy();
-      const url = await clip.read();
-
-      // Close dialog
-      await page.keyboard.press('Escape');
-      await this.randomDelay(200, 400);
-
-      return (url && url.includes('facebook.com')) ? url : null;
-
-    } catch (err) {
-      await page.keyboard.press('Escape').catch(() => {});
-      return null;
+      // Delay before retry
+      if (attempt < maxRetries) {
+        await this.randomDelay(500, 1000);
+      }
     }
+
+    return null;
+  }
+
+  // Expand post content by clicking "See more" buttons
+  async expandPostContent(page, postElement) {
+    try {
+      await postElement.evaluate((el) => {
+        // Find and click all "See more" buttons within this post
+        // Supports multiple languages: English, Italian, Spanish, French, German, Portuguese
+        const buttons = el.querySelectorAll('[role="button"], span[dir="auto"], div[role="button"]');
+        for (const btn of buttons) {
+          const text = (btn.textContent || '').trim().toLowerCase();
+          if (text === 'see more' || text === 'see original' || text === 'continue reading' ||
+              text === 'altro' || text === 'ver más' || text === 'ver mais' ||
+              text === 'voir plus' || text === 'mehr anzeigen' || text === 'vedi altro' ||
+              text === 'afficher la suite' || text === 'mostra altro' || text === 'ler mais') {
+            try {
+              btn.click();
+            } catch (e) {}
+          }
+        }
+      });
+      await this.delay(300); // Wait for expansion
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
+  // Expand all "See more" buttons on the page
+  async expandAllSeeMoreButtons(page) {
+    try {
+      await page.evaluate(() => {
+        // Find all "See more" / "See original" buttons
+        // Supports multiple languages: English, Italian, Spanish, French, German, Portuguese
+        const buttons = document.querySelectorAll('[role="button"], span[dir="auto"], div[role="button"]');
+        for (const btn of buttons) {
+          const text = (btn.textContent || '').trim().toLowerCase();
+          if (text === 'see more' || text === 'see original' || text === 'continue reading' ||
+              text === 'altro' || text === 'ver más' || text === 'ver mais' ||
+              text === 'voir plus' || text === 'mehr anzeigen' || text === 'vedi altro' ||
+              text === 'afficher la suite' || text === 'mostra altro' || text === 'ler mais') {
+            try {
+              btn.click();
+            } catch (e) {}
+          }
+        }
+      });
+      // Wait for content to expand
+      await this.delay(500);
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
+  // Construct post URL from post ID as fallback
+  constructPostUrlFromId(postId, groupId) {
+    if (!postId) return null;
+
+    // If it's a hash-based ID, can't construct URL
+    if (postId.startsWith('hash_')) return null;
+
+    // If it's a pfbid format
+    if (postId.startsWith('pfbid')) {
+      return `https://www.facebook.com/${postId}`;
+    }
+
+    // If it's a numeric ID, construct permalink URL
+    if (/^\d+$/.test(postId)) {
+      return `https://www.facebook.com/groups/${groupId}/posts/${postId}`;
+    }
+
+    return null;
   }
 
   // Scrape comments from posts
