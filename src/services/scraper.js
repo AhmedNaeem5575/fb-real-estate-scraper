@@ -829,7 +829,7 @@ class Scraper {
   }
 
   // Expand post content by clicking "See more" buttons
-  async expandPostContent(page, postElement) {
+  async expandPostContent(postElement) {
     try {
       await postElement.evaluate((el) => {
         // Find and click all "See more" buttons within this post
