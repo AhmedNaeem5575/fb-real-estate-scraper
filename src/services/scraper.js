@@ -383,10 +383,14 @@ class Scraper {
             const seeMoreButtons = el.querySelectorAll('[role="button"], span[dir="auto"], div[role="button"]');
             for (const btn of seeMoreButtons) {
               const btnText = (btn.textContent || '').trim().toLowerCase();
+              // Check for exact matches and matches with ellipsis (...)
               if (btnText === 'see more' || btnText === 'see original' || btnText === 'continue reading' ||
-                  btnText === 'altro' || btnText === 'ver más' || btnText === 'ver mais' ||
-                  btnText === 'voir plus' || btnText === 'mehr anzeigen' || btnText === 'vedi altro' ||
-                  btnText === 'afficher la suite' || btnText === 'mostra altro' || btnText === 'ler mais') {
+                  btnText === 'see more...' || btnText === 'altro' || btnText === 'altro...' ||
+                  btnText === 'ver más' || btnText === 'ver más...' || btnText === 'ver mais' ||
+                  btnText === 'ver mais...' || btnText === 'voir plus' || btnText === 'voir plus...' ||
+                  btnText === 'mehr anzeigen' || btnText === 'vedi altro' || btnText === 'vedi altro...' ||
+                  btnText === 'afficher la suite' || btnText === 'mostra altro' || btnText === 'mostra altro...' ||
+                  btnText === 'ler mais' || btnText === 'ler mais...') {
                 try { btn.click(); } catch(e) {}
               }
             }
@@ -837,10 +841,14 @@ class Scraper {
         const buttons = el.querySelectorAll('[role="button"], span[dir="auto"], div[role="button"]');
         for (const btn of buttons) {
           const text = (btn.textContent || '').trim().toLowerCase();
+          // Check for exact matches and matches with ellipsis (...)
           if (text === 'see more' || text === 'see original' || text === 'continue reading' ||
-              text === 'altro' || text === 'ver más' || text === 'ver mais' ||
-              text === 'voir plus' || text === 'mehr anzeigen' || text === 'vedi altro' ||
-              text === 'afficher la suite' || text === 'mostra altro' || text === 'ler mais') {
+              text === 'see more...' || text === 'altro' || text === 'altro...' ||
+              text === 'ver más' || text === 'ver más...' || text === 'ver mais' ||
+              text === 'ver mais...' || text === 'voir plus' || text === 'voir plus...' ||
+              text === 'mehr anzeigen' || text === 'vedi altro' || text === 'vedi altro...' ||
+              text === 'afficher la suite' || text === 'mostra altro' || text === 'mostra altro...' ||
+              text === 'ler mais' || text === 'ler mais...') {
             try {
               btn.click();
             } catch (e) {}
@@ -862,10 +870,14 @@ class Scraper {
         const buttons = document.querySelectorAll('[role="button"], span[dir="auto"], div[role="button"]');
         for (const btn of buttons) {
           const text = (btn.textContent || '').trim().toLowerCase();
+          // Check for exact matches and matches with ellipsis (...)
           if (text === 'see more' || text === 'see original' || text === 'continue reading' ||
-              text === 'altro' || text === 'ver más' || text === 'ver mais' ||
-              text === 'voir plus' || text === 'mehr anzeigen' || text === 'vedi altro' ||
-              text === 'afficher la suite' || text === 'mostra altro' || text === 'ler mais') {
+              text === 'see more...' || text === 'altro' || text === 'altro...' ||
+              text === 'ver más' || text === 'ver más...' || text === 'ver mais' ||
+              text === 'ver mais...' || text === 'voir plus' || text === 'voir plus...' ||
+              text === 'mehr anzeigen' || text === 'vedi altro' || text === 'vedi altro...' ||
+              text === 'afficher la suite' || text === 'mostra altro' || text === 'mostra altro...' ||
+              text === 'ler mais' || text === 'ler mais...') {
             try {
               btn.click();
             } catch (e) {}
