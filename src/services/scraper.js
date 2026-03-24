@@ -760,11 +760,15 @@ class Scraper {
         await postEl.scrollIntoViewIfNeeded();
         await this.randomDelay(300, 500);
 
-        // Click share button
+        // Click share button (supports multiple languages)
         const shareClicked = await postEl.evaluate((el) => {
+          // "Share" in multiple languages
+          const shareTexts = ['share', 'condividi', 'compartir', 'partager', 'teilen', 'compartilhar'];
+
           const btns = el.querySelectorAll('div[role="button"]');
           for (const b of btns) {
-            if (b.textContent?.toLowerCase().includes('share')) {
+            const txt = (b.textContent || '').toLowerCase();
+            if (shareTexts.some(s => txt.includes(s))) {
               b.click();
               return true;
             }
@@ -778,27 +782,11 @@ class Scraper {
         }
         await this.randomDelay(1500, 2000);
 
-        // Click "Copy link"
-        const copyClicked = await page.evaluate(() => {
-          const dialog = document.querySelector('[role="dialog"]');
-          if (!dialog) return false;
-
-          const items = dialog.querySelectorAll('[role="button"], [tabindex], div[dir]');
-          for (const item of items) {
-            const txt = (item.textContent || '').trim();
-            if (txt === 'Copy link') {
-              item.click();
-              return true;
-            }
-          }
-          return false;
-        });
-
-        if (!copyClicked) {
-          logger.warn(`Copy link button not found for post ${index}`);
-          await page.keyboard.press('Escape');
-          continue;
-        }
+        // Use keyboard navigation to click "Copy link" - works across all languages
+        // Shift+Tab to focus on copy link button, then Enter to click it
+        await page.keyboard.press('Shift+Tab');
+        await this.delay(300);
+        await page.keyboard.press('Enter');
 
         // Wait for clipboard
         await this.delay(800);
