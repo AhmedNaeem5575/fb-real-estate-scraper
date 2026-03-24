@@ -29,15 +29,6 @@ if (!groupUrl) {
   process.exit(1);
 }
 
-// Dynamic import for clipboardy
-let clipboardy = null;
-const getClipboardy = async () => {
-  if (!clipboardy) {
-    clipboardy = (await import('clipboardy')).default;
-  }
-  return clipboardy;
-};
-
 async function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -247,8 +238,8 @@ async function getPostUrlByIndex(page, index, maxRetries = 2) {
 
       await delay(800);
 
-      const clip = await getClipboardy();
-      const url = await clip.read();
+      // Read clipboard using Playwright's native method
+      const url = await page.evaluate(() => navigator.clipboard.readText());
 
       await page.keyboard.press('Escape');
       await randomDelay(200, 400);

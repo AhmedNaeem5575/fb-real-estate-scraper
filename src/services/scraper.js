@@ -12,15 +12,6 @@ const SESSION_PATH = process.env.SESSION_PATH || './playwright/session';
 const POSTS_PER_GROUP = parseInt(process.env.POSTS_PER_GROUP) || 50;
 const COMMENTS_PER_POST = parseInt(process.env.COMMENTS_PER_POST) || 10;
 
-// Dynamic import for clipboardy (ESM module)
-let clipboardy = null;
-const getClipboardy = async () => {
-  if (!clipboardy) {
-    clipboardy = (await import('clipboardy')).default;
-  }
-  return clipboardy;
-};
-
 class Scraper {
   constructor() {
     this.context = null;
@@ -791,9 +782,8 @@ class Scraper {
         // Wait for clipboard
         await this.delay(800);
 
-        // Read clipboard (using dynamic import for ESM module)
-        const clip = await getClipboardy();
-        const url = await clip.read();
+        // Read clipboard using Playwright's native method
+        const url = await page.evaluate(() => navigator.clipboard.readText());
 
         // Close dialog
         await page.keyboard.press('Escape');
