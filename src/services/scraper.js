@@ -61,6 +61,10 @@ class Scraper {
     logger.info('Browser closed');
   }
 
+  getContext() {
+    return this.context;
+  }
+
   async scrapeAllGroups() {
     if (this.isRunning) {
       logger.warn('Scraper is already running, skipping...');
