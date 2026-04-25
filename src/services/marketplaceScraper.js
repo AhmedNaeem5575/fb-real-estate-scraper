@@ -4,9 +4,11 @@ const Listing = require('../models/Listing');
 const operationalControl = require('./operationalControl');
 
 const MARKETPLACE_ENABLED = process.env.MARKETPLACE_ENABLED === 'true';
-const MARKETPLACE_LOCATION = process.env.MARKETPLACE_LOCATION || 'Rome, Italy';
+const MARKETPLACE_LOCATION = process.env.MARKETPLACE_LOCATION || '';
 const MARKETPLACE_RADIUS_KM = parseInt(process.env.MARKETPLACE_RADIUS_KM) || 10;
 const MARKETPLACE_POSTS_LIMIT = parseInt(process.env.MARKETPLACE_POSTS_LIMIT) || 50;
+const MARKETPLACE_LAT = process.env.MARKETPLACE_LAT || '';
+const MARKETPLACE_LNG = process.env.MARKETPLACE_LNG || '';
 
 const CATEGORIES = ['propertyrentals', 'propertyforsale'];
 const MARKETPLACE_BASE_URL = 'https://www.facebook.com/marketplace';
@@ -120,88 +122,126 @@ class MarketplaceScraper {
   }
 
   async setLocationFilter(page) {
+    if (!MARKETPLACE_LOCATION) {
+      logger.info('No MARKETPLACE_LOCATION set, skipping location filter');
+      return;
+    }
+
     try {
       logger.info(`Setting location filter: ${MARKETPLACE_LOCATION}, radius: ${MARKETPLACE_RADIUS_KM}km`);
 
-      // Look for the location input/filter button
-      const locationInput = await page.$(
-        'input[placeholder*="ocation" i], input[aria-label*="ocation" i], input[aria-label*="ocation" i]'
+      // Click the location filter button/area
+      // Facebook Marketplace shows location as a clickable pill/button near the top
+      const locationBtn = await page.$(
+        'div[aria-label*="ocation" i], span[aria-label*="ocation" i], ' +
+        'div[role="button"] span[dir="auto"]:has-text("' + MARKETPLACE_LOCATION.split(',')[0].trim() + '"),' +
+        '[data-testid="marketplace_search_radius"], ' +
+        'span[dir="auto"]:has-text("ocation")'
       );
 
-      if (locationInput) {
-        await locationInput.click();
-        await this.delay(500);
-        await locationInput.fill('');
-        await this.delay(300);
+      if (!locationBtn) {
+        // Try clicking any element near the search bar that looks like a location pill
+        const anyLocationEl = await page.evaluate(() => {
+          const spans = document.querySelectorAll('span[dir="auto"]');
+          for (const span of spans) {
+            const text = span.textContent?.trim() || '';
+            if (text.length > 2 && text.length < 50 && /^[A-ZÀ-ÿ]/.test(text) && !/marketplace|notifications|inbox/i.test(text)) {
+              // Check if it's near a location-related element
+              const parent = span.closest('[role="button"]');
+              if (parent) return true;
+            }
+          }
+          return false;
+        });
 
-        // Type location character by character for natural feel
-        for (const char of MARKETPLACE_LOCATION) {
-          await locationInput.type(char, { delay: 50 + Math.random() * 100 });
+        if (!anyLocationEl) {
+          logger.warn('Location filter element not found, proceeding without location filter');
+          return;
         }
+      }
 
-        // Wait for suggestions dropdown
+      // Click to open location dialog
+      const clickable = locationBtn || await page.$('div[role="button"] span[dir="auto"]');
+      if (clickable) {
+        const parentBtn = await clickable.evaluateHandle(el => el.closest('[role="button"]') || el);
+        await parentBtn.click();
+        await this.delay(1000);
+      }
+
+      // Look for the search/input field in the opened dialog
+      const searchInput = await page.$(
+        'input[placeholder*="ocation" i], input[placeholder*="earch" i], ' +
+        'input[aria-label*="ocation" i], input[aria-label*="earch" i], ' +
+        'label input[type="text"]'
+      );
+
+      if (searchInput) {
+        await searchInput.click();
+        await this.delay(300);
+        await searchInput.fill('');
+        await this.delay(200);
+
+        // Type location
+        await searchInput.type(MARKETPLACE_LOCATION, { delay: 80 });
         await this.delay(2000);
 
-        // Click first suggestion
+        // Select first suggestion
         const suggestion = await page.$(
-          '[role="listbox"] [role="option"]:first-child, [role="listbox"] li:first-child, ul[role="listbox"] > li:first-child'
+          '[role="listbox"] [role="option"]:first-child, [role="listbox"] li:first-child'
         );
         if (suggestion) {
           await suggestion.click();
           await this.delay(1000);
         } else {
-          await locationInput.press('ArrowDown');
+          await searchInput.press('ArrowDown');
           await this.delay(300);
-          await locationInput.press('Enter');
+          await searchInput.press('Enter');
           await this.delay(1000);
         }
-
-        // Try to set radius
-        const radiusSelect = await page.$(
-          'select[aria-label*="adius" i], select[aria-label*="distance" i], [role="combobox"][aria-label*="adius" i], [role="combobox"][aria-label*="distance" i]'
-        );
-        if (radiusSelect) {
-          await radiusSelect.click();
-          await this.delay(500);
-
-          // Find the option closest to MARKETPLACE_RADIUS_KM
-          const radiusOptions = await page.$$eval(
-            '[role="listbox"] [role="option"], select option',
-            (els, targetKm) => {
-              return els.map(el => ({
-                text: el.textContent?.trim() || '',
-                value: el.getAttribute('value') || el.getAttribute('data-value') || el.textContent?.trim()
-              })).filter(opt => /\d+/.test(opt.text))
-                .map(opt => ({
-                  ...opt,
-                  km: parseInt(opt.text.match(/\d+/)?.[0] || '0')
-                }))
-                .sort((a, b) => Math.abs(a.km - targetKm) - Math.abs(b.km - targetKm));
-            },
-            MARKETPLACE_RADIUS_KM
-          );
-
-          if (radiusOptions.length > 0) {
-            const bestMatch = radiusOptions[0];
-            const optionEl = await page.$(`[role="option"]:text("${bestMatch.text}"), option[value="${bestMatch.value}"]`);
-            if (optionEl) {
-              await optionEl.click();
-              await this.delay(500);
-            }
-          }
-        }
-
-        // Apply / search
-        const applyBtn = await page.$(
-          'div[role="dialog"] button:has-text("Apply"), div[role="dialog"] button:has-text("Search"), div[role="dialog"] button:has-text("Applica")'
-        );
-        if (applyBtn) {
-          await applyBtn.click();
-          await this.delay(1500);
-        }
-      } else {
-        logger.warn('Location input not found, proceeding without location filter');
       }
+
+      // Try to set radius dropdown
+      const radiusEl = await page.$(
+        '[role="combobox"][aria-label*="adius" i], [role="combobox"][aria-label*="distance" i], ' +
+        'label:has-text("adius") + [role="combobox"], select[aria-label*="adius" i]'
+      );
+      if (radiusEl) {
+        await radiusEl.click();
+        await this.delay(500);
+
+        // Find closest radius option
+        const options = await page.$$eval('[role="listbox"] [role="option"]', (els, targetKm) => {
+          return els.map(el => ({
+            text: el.textContent?.trim() || '',
+          })).filter(opt => /\d+/.test(opt.text))
+            .map(opt => ({
+              ...opt,
+              km: parseInt(opt.text.match(/\d+/)?.[0] || '0')
+            }))
+            .sort((a, b) => Math.abs(a.km - targetKm) - Math.abs(b.km - targetKm));
+        }, MARKETPLACE_RADIUS_KM);
+
+        if (options.length > 0) {
+          const best = options[0];
+          const optEl = await page.$(`[role="option"]:text("${best.text}")`);
+          if (optEl) await optEl.click();
+          await this.delay(500);
+        }
+      }
+
+      // Click Apply/Confirm
+      const applyBtn = await page.$(
+        'div[role="dialog"] button:has-text("Apply"), ' +
+        'div[role="dialog"] button:has-text("Applica"), ' +
+        'div[role="dialog"] button:has-text("Search"), ' +
+        'div[role="dialog"] button:has-text("Cerca")'
+      );
+      if (applyBtn) {
+        await applyBtn.click();
+        await this.delay(2000);
+      }
+
+      logger.info('Location filter applied');
     } catch (error) {
       logger.warn(`Failed to set location filter: ${error.message}`);
     }
@@ -289,9 +329,11 @@ class MarketplaceScraper {
 
       // --- Seller extraction ---
       // Marketplace seller links match /marketplace/profile/{user_id}/
+      // There are typically two links: one with "Seller details"/"Dettagli del venditore" and one with the actual name
+      const sellerUiLabels = /^(seller details|dettagli del venditore|dettagli venditore|vendedor|about seller)$/i;
       for (const link of allLinks) {
         if (/\/marketplace\/profile\/\d+/.test(link.href)) {
-          if (/^(seller details|dettagli venditore)$/i.test(link.text)) continue;
+          if (sellerUiLabels.test(link.text)) continue;
           if (link.text.length >= 3 && link.text.length <= 80 && /^[A-ZÀ-ÿ]/.test(link.text)) {
             result.seller_name = link.text;
             let url = link.href.split('?')[0];
@@ -391,8 +433,16 @@ class MarketplaceScraper {
   }
 
   async scrapeCategory(page, category, marketplaceGroup) {
-    const categoryUrl = `${MARKETPLACE_BASE_URL}/category/${category}`;
-    logger.info(`Navigating to marketplace category: ${category}`);
+    let categoryUrl = `${MARKETPLACE_BASE_URL}/category/${category}`;
+
+    // If lat/lng are provided, append them as URL params (most reliable location filtering)
+    if (MARKETPLACE_LAT && MARKETPLACE_LNG) {
+      categoryUrl += `?latitude=${MARKETPLACE_LAT}&longitude=${MARKETPLACE_LNG}&radius=${MARKETPLACE_RADIUS_KM}`;
+      logger.info(`Navigating to marketplace category: ${category} (lat: ${MARKETPLACE_LAT}, lng: ${MARKETPLACE_LNG}, radius: ${MARKETPLACE_RADIUS_KM}km)`);
+    } else {
+      logger.info(`Navigating to marketplace category: ${category}`);
+    }
+
     await page.goto(categoryUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await this.delay(3000);
     await this.humanMove(page);

@@ -17,8 +17,10 @@ const { chromium } = require('playwright');
 const path = require('path');
 
 const SESSION_PATH = process.env.SESSION_PATH || './playwright/session';
-const MARKETPLACE_LOCATION = process.env.MARKETPLACE_LOCATION || 'Rome, Italy';
+const MARKETPLACE_LOCATION = process.env.MARKETPLACE_LOCATION || '';
 const MARKETPLACE_RADIUS_KM = parseInt(process.env.MARKETPLACE_RADIUS_KM) || 10;
+const MARKETPLACE_LAT = process.env.MARKETPLACE_LAT || '';
+const MARKETPLACE_LNG = process.env.MARKETPLACE_LNG || '';
 
 // Parse arguments
 const args = process.argv.slice(2);
@@ -223,8 +225,9 @@ async function extractDetail(page) {
     // The name is in the link text (e.g. "Feroz Hussain"), NOT "Seller details"
     for (const link of result.all_links) {
       if (/\/marketplace\/profile\/\d+/.test(link.href)) {
-        // Skip "Seller details" / "Dettagli venditore" UI labels
-        if (/^(seller details|dettagli venditore)$/i.test(link.text)) continue;
+        // Skip UI labels: "Seller details" / "Dettagli del venditore" etc.
+        const sellerUiLabels = /^(seller details|dettagli del venditore|dettagli venditore|vendedor|about seller)$/i;
+        if (sellerUiLabels.test(link.text)) continue;
         if (link.text.length >= 3 && link.text.length <= 80 && /^[A-ZÀ-ÿ]/.test(link.text)) {
           result.seller_name = link.text;
           let url = link.href.split('?')[0];
@@ -373,7 +376,8 @@ async function main() {
   console.log('=== Marketplace Scraper Test ===');
   console.log(`Categories: ${CATEGORIES.join(', ')}`);
   console.log(`Limit: ${limit} per category`);
-  console.log(`Location: ${MARKETPLACE_LOCATION}`);
+  console.log(`Location: ${MARKETPLACE_LOCATION || 'N/A'}`);
+  console.log(`Coordinates: lat=${MARKETPLACE_LAT || 'N/A'}, lng=${MARKETPLACE_LNG || 'N/A'}`);
   console.log(`Radius: ${MARKETPLACE_RADIUS_KM}km`);
   console.log(`Visit detail pages: ${visitDetail}`);
   console.log('');
@@ -397,7 +401,14 @@ async function main() {
       console.log('='.repeat(60));
 
       const page = await context.newPage();
-      const url = `https://www.facebook.com/marketplace/category/${cat}`;
+      let url = `https://www.facebook.com/marketplace/category/${cat}`;
+
+      // Use URL params for location if lat/lng are configured
+      if (MARKETPLACE_LAT && MARKETPLACE_LNG) {
+        url += `?latitude=${MARKETPLACE_LAT}&longitude=${MARKETPLACE_LNG}&radius=${MARKETPLACE_RADIUS_KM}`;
+        console.log(`Using location params: lat=${MARKETPLACE_LAT}, lng=${MARKETPLACE_LNG}, radius=${MARKETPLACE_RADIUS_KM}km`);
+      }
+
       console.log(`Navigating to: ${url}`);
 
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
