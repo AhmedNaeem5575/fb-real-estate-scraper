@@ -1,9 +1,11 @@
 const cron = require('node-cron');
 const scraper = require('./scraper');
+const marketplaceScraper = require('./marketplaceScraper');
 const operationalControl = require('./operationalControl');
 const logger = require('../utils/logger');
 
 const INTERVAL_HOURS = parseInt(process.env.SCRAPE_INTERVAL_HOURS) || 4;
+const MARKETPLACE_ENABLED = process.env.MARKETPLACE_ENABLED === 'true';
 
 let scheduledTask = null;
 let isRunning = false;
@@ -56,6 +58,13 @@ function start() {
     lastRunError = null;
     try {
       await scraper.scrapeAllGroups();
+
+      if (MARKETPLACE_ENABLED) {
+        logger.info('Starting Marketplace scrape...');
+        const context = scraper.getContext();
+        await marketplaceScraper.scrapeMarketplace(context);
+      }
+
       lastRun = new Date();
     } catch (error) {
       logger.error('Scheduled scrape job failed:', error.message);
@@ -93,6 +102,13 @@ async function runNow() {
 
   try {
     await scraper.scrapeAllGroups();
+
+    if (MARKETPLACE_ENABLED) {
+      logger.info('Starting Marketplace scrape...');
+      const context = scraper.getContext();
+      await marketplaceScraper.scrapeMarketplace(context);
+    }
+
     lastRun = new Date();
   } catch (error) {
     lastRunError = error.message;
@@ -135,7 +151,8 @@ function getStatus() {
     lastRunError,
     nextRun: nextRunTime ? nextRunTime.toISOString() : null,
     timeUntilNextMs: timeUntilNext,
-    intervalHours: INTERVAL_HOURS
+    intervalHours: INTERVAL_HOURS,
+    marketplaceEnabled: MARKETPLACE_ENABLED
   };
 }
 

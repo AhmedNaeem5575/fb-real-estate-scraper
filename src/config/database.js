@@ -188,6 +188,18 @@ function initialize() {
     logger.info('Default admin seeded (username: admin, password: admin)');
   }
 
+  // Seed virtual "Facebook Marketplace" group if not exists
+  const marketplaceGroup = db.prepare(
+    "SELECT id FROM groups WHERE facebook_group_id = 'marketplace'"
+  ).get();
+  if (!marketplaceGroup) {
+    db.prepare(`
+      INSERT INTO groups (facebook_group_id, url, name, is_active, polling_interval_min)
+      VALUES ('marketplace', 'https://www.facebook.com/marketplace', 'Facebook Marketplace', 1, 60)
+    `).run();
+    logger.info('Virtual Marketplace group seeded');
+  }
+
   logger.info('Database initialized successfully');
 }
 
