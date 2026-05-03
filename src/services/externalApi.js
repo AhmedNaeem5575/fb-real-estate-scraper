@@ -392,6 +392,7 @@ class ExternalApiService {
         post_type: this.mapPostType(listing?.listing_type) || 'selling',
         property_type: listing?.property_type || this.detectPropertyType(listing?.raw_content) || 'residential',
         permalink: listing?.post_url || '',
+        source: facebookGroupId === 'marketplace' ? 'marketplace' : 'group',
         // Add comment object
         comment: {
           facebook_comment_id: comment.comment_id || '',
