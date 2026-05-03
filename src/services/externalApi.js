@@ -154,7 +154,8 @@ class ExternalApiService {
           message: cleanedMessage,
           post_type: postType || '',
           property_type: propertyType || '',
-          permalink: listing.post_url || ''
+          permalink: listing.post_url || '',
+          source: facebookGroupId === 'marketplace' ? 'marketplace' : 'group'
         },
         prospect_contact: {},
         news_lead: {}
