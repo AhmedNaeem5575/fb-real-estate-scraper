@@ -45,7 +45,7 @@ app.use((req, res, next) => {
 // Auth middleware for API routes (except /api/auth/*)
 app.use('/api', (req, res, next) => {
   // Skip auth for /auth/* routes
-  if (req.path.startsWith('/auth')) {
+  if (req.path.startsWith('/auth') || req.path.startsWith('/messenger')) {
     return next();
   }
   // Skip auth for health check
