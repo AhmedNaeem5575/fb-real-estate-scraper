@@ -16,12 +16,24 @@ router.post('/send', async (req, res) => {
       return res.status(400).json({ success: false, error: 'message is required' });
     }
 
-    // Ensure browser context is initialized
-    if (!scraper.getContext()) {
+    // Ensure browser context is initialized and usable
+    let context = scraper.getContext();
+
+    if (!context) {
       await scraper.initialize();
+      context = scraper.getContext();
     }
 
-    const context = scraper.getContext();
+    try {
+      // Test if context is still alive by creating a page
+      const testPage = await context.newPage();
+      await testPage.close();
+    } catch (_) {
+      logger.info('Browser context was closed, re-initializing...');
+      await scraper.initialize();
+      context = scraper.getContext();
+    }
+
     if (!context) {
       return res.status(503).json({ success: false, error: 'Browser session not available' });
     }
